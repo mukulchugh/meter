@@ -853,7 +853,7 @@ The following concept uses illustrative figures, not account data.
 
 <details>
 <summary>Inspected reference: QuotaBar’s failed-refresh state</summary>
-<img src="/Users/mukulchugh/.aside/u/0/sessions/2026-11-13_ff71QJujnvu6wJiH/tmp/quota-error.png" alt="QuotaBar retains stale quota values, explains rate limiting, shows retry timing, and preserves local usage history.">
+<!-- local screenshot from the research session, not included -->
 <p>Published sample-data screenshot. <a href="https://github.com/softmaxe/quota-bar/blob/main/docs/images/interactions/refresh-failed.png">Original source</a></p>
 </details>
 <script>
