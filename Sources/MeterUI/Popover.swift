@@ -16,7 +16,11 @@ public struct MenuBarLabelView: View {
     }
     public var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: isPreview ? "eye" : title.showsAttention ? "exclamationmark.triangle.fill" : "gauge.with.dots.needle.50percent")
+            if isPreview {
+                Image(systemName: "eye")
+            } else {
+                Image(nsImage: Brand.glyph(attention: title.showsAttention))
+            }
             // Sample numbers must never pass for real spend in the menu bar.
             if isPreview { Text("Sample") } else if let text = title.text { Text(text).monospacedDigit() }
         }

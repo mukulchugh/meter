@@ -13,19 +13,19 @@ struct MeterApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            PopoverRoot().environment(model)
+            PopoverRoot().environment(model).tint(Brand.accent)
         } label: {
             MenuBarLabelView(title: model.popover.title, isPreview: model.isPreviewing)
         }
         .menuBarExtraStyle(.window)
 
         Window("Meter", id: MeterWindowID.main) {
-            MainWindowRoot().environment(model)
+            MainWindowRoot().environment(model).tint(Brand.accent)
         }
         .defaultSize(width: 1040, height: 700)
 
         Settings {
-            SettingsRoot().environment(model)
+            SettingsRoot().environment(model).tint(Brand.accent)
         }
     }
 }

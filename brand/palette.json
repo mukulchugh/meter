@@ -1,0 +1,76 @@
+{
+  "name": "Meter Petrol",
+  "color_space": "sRGB",
+  "accent": {
+    "light": "#087F82",
+    "dark": "#62D4D2",
+    "usage": "Selection, focus and the primary reading. Use the light variant on light surfaces and the dark variant on dark surfaces."
+  },
+  "neutrals": {
+    "paper": "#F5F7F8",
+    "ink": "#10181C"
+  },
+  "icon": {
+    "primary": "icon/meter-icon-1024.png",
+    "surface": "light frosted glass",
+    "surface_reference": "#F5F7F8",
+    "mark_reference": "#087F82",
+    "appearance": "Use the light tile in both light and dark appearances.",
+    "alternate": "icon/meter-icon-dark-1024.png",
+    "canvas_px": 1024,
+    "tile_bounds_px": [100, 100, 924, 924],
+    "corner_radius_px": 185,
+    "exterior_alpha": 0,
+    "raster_contrast_16px": {
+      "backgrounds": ["#FFFFFF", "#10181C"],
+      "arc_to_adjacent_glass": 4.31,
+      "needle_to_adjacent_glass": 3.22,
+      "method": "Actual icon_16x16.png composited on each background; arc sample (7,5) vs glass (7,3), needle (9,8) vs glass (8,7), origin top-left. These are representative samples, not minimum contrast across all antialiased pixels."
+    }
+  },
+  "states": {
+    "fresh": {
+      "light": "#34C759",
+      "dark": "#30D158",
+      "native_token": "NSColor.systemGreen",
+      "usage": "Optional small status indicator with a Fresh label and update time."
+    },
+    "delayed": {
+      "light": "#FF9500",
+      "dark": "#FF9F0A",
+      "native_token": "NSColor.systemOrange",
+      "usage": "Delayed data, paired with a timestamp."
+    },
+    "stale_or_error": {
+      "light": "#FF3B30",
+      "dark": "#FF453A",
+      "native_token": "NSColor.systemRed",
+      "usage": "Unavailable, stale or failed readings. Explain the specific condition in text."
+    },
+    "over_budget": {
+      "light": "#FF9500",
+      "dark": "#FF9F0A",
+      "native_token": "NSColor.systemOrange",
+      "usage": "A measured budget warning, paired with the amount over budget."
+    }
+  },
+  "system_color_note": "State hex values are fixed sRGB design references close to standard system colours. In a native app, prefer the named dynamic NSColor tokens so appearance and accessibility can adapt.",
+  "contrast": {
+    "method": "WCAG 2 relative luminance, sRGB linearization, opaque flat colours, rounded to two decimals",
+    "backgrounds": {
+      "white": "#FFFFFF",
+      "near_black": "#10181C"
+    },
+    "accent_light": {
+      "on_white": 4.81,
+      "on_near_black": 3.74,
+      "on_paper": 4.47
+    },
+    "accent_dark": {
+      "on_white": 1.77,
+      "on_near_black": 10.15,
+      "on_paper": 1.65
+    },
+    "usage": "Use light accent text on white and dark accent text on near-black. Light accent on paper is 4.47:1, suitable for the icon graphic but below 4.5:1 for normal text; use ink for small text on paper. Ratios do not cover glass gradients or semantic state colours."
+  }
+}

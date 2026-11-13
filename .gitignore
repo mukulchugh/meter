@@ -4,3 +4,5 @@
 .DS_Store
 *.xcuserstate
 /dist/
+brand/lane/codex*.log
+brand/lane/exit
