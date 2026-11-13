@@ -22,6 +22,7 @@ public struct MainWindowRoot: View {
                 case .keys: KeysProjectsView(model: model)
                 case .models: ModelsView(model: model)
                 case .budgets: BudgetsView(model: model)
+                case .planUsage: PlanUsageView(model: model)
                 case .connections: ConnectionsView(model: model)
                 case .export: ExportView(model: model)
                 }

@@ -47,6 +47,7 @@ public struct RefreshReport: Sendable, Equatable {
 public actor SyncEngine {
     private let store: MeterStore
     private let secrets: any Secrets
+    private let ant: (any AntAuth)?
     private let factory: ProviderClientFactory
     private let now: @Sendable () -> Date
     public var config: SyncConfig
@@ -57,10 +58,14 @@ public actor SyncEngine {
     private var failures = [String: Int]()
     private var lastAttempt = [String: Date]()
 
-    public init(store: MeterStore, secrets: any Secrets, clientFactory: @escaping ProviderClientFactory = defaultClientFactory(),
+    /// `ant` is nil unless the app wires the real CLI in: orgs signed in through `ant` then report "not signed
+    /// in" instead of starting anything.
+    public init(store: MeterStore, secrets: any Secrets, ant: (any AntAuth)? = nil,
+                clientFactory: @escaping ProviderClientFactory = defaultClientFactory(),
                 config: SyncConfig = SyncConfig(), now: @escaping @Sendable () -> Date = { Date() }) {
         self.store = store
         self.secrets = secrets
+        self.ant = ant
         self.factory = clientFactory
         self.config = config
         self.now = now
@@ -150,11 +155,27 @@ public actor SyncEngine {
         let wanted = Self.sources(for: org.provider).filter { only?.contains($0) ?? true }
         guard !wanted.isEmpty else { return RefreshReport(orgId: org.id, outcomes: [:]) }
 
-        let secret: String?
-        do { secret = try secrets.read(org.keychainRef) } catch { secret = nil }
+        // The credential is read once per pass: a Keychain key, or a fresh `ant` access token that lives only
+        // in this function and the client it builds (never stored, never logged).
+        var secret: String?
+        var missing = ProviderError.auth(.noKey, org.provider)
+        switch org.credential {
+        case .apiKey:
+            do { secret = try secrets.read(org.keychainRef) } catch { secret = nil }
+        case .antProfile(let profile):
+            missing = .auth(.notSignedIn, org.provider)
+            if let ant {
+                do { secret = try await ant.accessToken(profile: profile) } catch {
+                    switch error as? AntError {
+                    case .notInstalled: missing = .auth(.antMissing, org.provider)
+                    case .timedOut: missing = .network("The Anthropic CLI did not answer in time.")
+                    default: break
+                    }
+                }
+            }
+        }
         guard let secret, !secret.isEmpty else {
-            let err = ProviderError.auth(.noKey, org.provider)
-            for s in wanted { outcomes[s] = .failed(err); await recordFailure(org, s, err) }
+            for s in wanted { outcomes[s] = .failed(missing); await recordFailure(org, s, missing) }
             return RefreshReport(orgId: org.id, outcomes: outcomes)
         }
         let client = factory(org, secret)

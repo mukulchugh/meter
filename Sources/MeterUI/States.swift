@@ -38,7 +38,9 @@ public enum Freshness {
         switch org.state {
         case .error:
             let kinds = snapshot.coverage.filter { $0.orgId == org.org.id && $0.lastError != nil }
-            if kinds.contains(where: { $0.errorKind == "auth" }) { return "key invalid" }
+            if kinds.contains(where: { $0.errorKind == "auth" }) {
+                return org.org.credential == .apiKey ? "key invalid" : "sign-in needed"
+            }
             return "error, showing last value"
         case .stale: return "stale" + reportedSuffix(org, now: now)
         case .delayed: return "delayed" + reportedSuffix(org, now: now)

@@ -35,16 +35,18 @@ public actor MeterStore {
 
     public func upsertOrg(_ org: Org) throws {
         try db.execute("""
-            INSERT INTO orgs (id, provider, display_name, keychain_ref) VALUES (?, ?, ?, ?)
+            INSERT INTO orgs (id, provider, display_name, keychain_ref, credential) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET provider = excluded.provider, display_name = excluded.display_name,
-                keychain_ref = excluded.keychain_ref
-            """, [.text(org.id), .text(org.provider.rawValue), .text(org.displayName), .text(org.keychainRef.raw)])
+                keychain_ref = excluded.keychain_ref, credential = excluded.credential
+            """, [.text(org.id), .text(org.provider.rawValue), .text(org.displayName), .text(org.keychainRef.raw),
+                  .text(org.credential.raw)])
     }
 
     public func orgs() throws -> [Org] {
-        try db.query("SELECT id, provider, display_name, keychain_ref FROM orgs ORDER BY display_name, id") { r in
+        try db.query("SELECT id, provider, display_name, keychain_ref, credential FROM orgs ORDER BY display_name, id") { r in
             Org(id: r.text(0), provider: Provider(rawValue: r.text(1)) ?? .anthropic, displayName: r.text(2),
-                keychainRef: KeychainRef(raw: r.text(3)) ?? .forOrg(id: r.text(0)))
+                keychainRef: KeychainRef(raw: r.text(3)) ?? .forOrg(id: r.text(0)),
+                credential: OrgCredential(raw: r.text(4)))
         }
     }
 
@@ -297,6 +299,27 @@ public actor MeterStore {
 
     public func setting(_ key: String) throws -> String? {
         try db.query("SELECT value FROM settings WHERE key = ?", [.text(key)]) { $0.text(0) }.first
+    }
+
+    // MARK: Plan usage (not spend: no snapshot, no query reads this)
+
+    public func savePlanUsage(_ u: PlanUsage) throws {
+        let windows = (try? JSONEncoder().encode(u.windows)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        try db.execute("""
+            INSERT INTO plan_usage (provider, plan_name, windows, fetched_at, state, detail) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider) DO UPDATE SET plan_name = excluded.plan_name, windows = excluded.windows,
+                fetched_at = excluded.fetched_at, state = excluded.state, detail = excluded.detail
+            """, [.text(u.provider.rawValue), .text(u.planName), .text(windows), .real(u.fetchedAt.timeIntervalSince1970),
+                  .text(u.state.rawValue), .text(u.detail)])
+    }
+
+    public func planUsage() throws -> [PlanUsage] {
+        try db.query("SELECT provider, plan_name, windows, fetched_at, state, detail FROM plan_usage ORDER BY provider") { r -> PlanUsage? in
+            guard let p = PlanProvider(rawValue: r.text(0)), let s = PlanUsageState(rawValue: r.text(4)) else { return nil }
+            let windows = (try? JSONDecoder().decode([PlanWindow].self, from: Data(r.text(2).utf8))) ?? []
+            return PlanUsage(provider: p, planName: r.optText(1), windows: windows,
+                             fetchedAt: Date(timeIntervalSince1970: r.real(3)), state: s, detail: r.optText(5))
+        }.compactMap { $0 }
     }
 
     // MARK: Snapshot

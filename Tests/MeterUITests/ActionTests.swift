@@ -214,7 +214,7 @@ import Testing
     }
 
     @Test func sidebarCoversEveryScreen() {
-        #expect(SidebarItem.allCases.map(\.title) == ["Overview", "People", "Keys & Projects", "Models", "Budgets & Alerts", "Connections", "Export"])
+        #expect(SidebarItem.allCases.map(\.title) == ["Overview", "People", "Keys & Projects", "Models", "Budgets & Alerts", "Plan usage", "Connections", "Export"])
     }
 }
 

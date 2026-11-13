@@ -37,14 +37,18 @@ public extension ProviderClient {
     func fetchLimits(projectIds: [String]) async throws -> [Limit]? { nil }
 }
 
-/// Builds a client for an org from its secret. The sync engine takes one so tests can inject a
+/// Builds a client for an org from its secret (for an `ant` org, a fresh access token). The sync engine takes one so tests can inject a
 /// transport.
 public typealias ProviderClientFactory = @Sendable (_ org: Org, _ secret: String) -> any ProviderClient
 
 public func defaultClientFactory(transport: any HTTPTransport = URLSessionTransport()) -> ProviderClientFactory {
     { org, secret in
         switch org.provider {
-        case .anthropic: AnthropicClient(orgId: org.id, apiKey: secret, transport: transport)
+        case .anthropic:
+            switch org.credential {
+            case .apiKey: AnthropicClient(orgId: org.id, apiKey: secret, transport: transport)
+            case .antProfile: AnthropicClient(orgId: org.id, bearerToken: secret, transport: transport)
+            }
         case .openai: OpenAIClient(orgId: org.id, apiKey: secret, transport: transport)
         }
     }

@@ -19,12 +19,12 @@ import Testing
         let url = dir.appendingPathComponent("nested/meter.db")
         do {
             let s = try MeterStore(url: url)
-            #expect(await s.schemaVersion == 1)
+            #expect(await s.schemaVersion == 2)
             try await s.upsertOrg(Org(id: "a", provider: .anthropic, displayName: "A"))
         }
         // Reopening runs no migration again and keeps the data.
         let again = try MeterStore(url: url)
-        #expect(await again.schemaVersion == 1)
+        #expect(await again.schemaVersion == 2)
         #expect(try await again.orgs().map(\.id) == ["a"])
         // WAL mode on a real file.
         #expect(FileManager.default.fileExists(atPath: url.path))
@@ -34,10 +34,10 @@ import Testing
         let db = try SQLiteDatabase(path: ":memory:")
         try db.migrate(Schema.migrations)
         let names = try db.query("SELECT name FROM sqlite_master WHERE type = 'table'") { $0.text(0) }
-        for t in ["orgs", "cost_lines", "entities", "tags", "budgets", "claude_code_days", "limits", "prepaid", "coverage", "settings"] {
+        for t in ["orgs", "cost_lines", "entities", "tags", "budgets", "claude_code_days", "limits", "prepaid", "coverage", "settings", "plan_usage"] {
             #expect(names.contains(t), "missing table \(t)")
         }
-        #expect(db.userVersion == 1)
+        #expect(db.userVersion == 2)
         let mode = try db.query("PRAGMA foreign_keys") { $0.int(0) }
         #expect(mode == [1])
     }

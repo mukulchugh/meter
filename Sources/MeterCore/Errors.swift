@@ -11,6 +11,14 @@ public enum AuthProblem: Sendable, Equatable {
     case forbidden
     /// No secret stored for this org.
     case noKey
+    /// A bearer (`ant` sign-in) token was refused with 401: sign in again.
+    case signInExpired
+    /// A bearer token was refused with 403: the account lacks the admin role.
+    case needsAdminRole
+    /// `ant` has no usable credentials for the profile.
+    case notSignedIn
+    /// The `ant` CLI is not installed.
+    case antMissing
 }
 
 public enum ProviderError: Error, Equatable, Sendable {
@@ -43,6 +51,14 @@ public enum ProviderError: Error, Equatable, Sendable {
                 return "This key can't read organization data. It must be an admin key created by an organization owner."
             case .noKey:
                 return "No key is stored for this organization. Add one in Connections."
+            case .signInExpired:
+                return "Anthropic rejected the sign-in. Sign in again from Connections."
+            case .needsAdminRole:
+                return "Your account needs the admin role in the Console organization. The Admin API isn't available for individual accounts."
+            case .notSignedIn:
+                return "Meter is not signed in to Anthropic for this organization. Sign in again from Connections."
+            case .antMissing:
+                return "The Anthropic CLI (ant) is not installed. Install it with: \(AntCommand.installHint)"
             }
         case .rateLimited(let after):
             if let after { return "Rate limited by the provider. Retrying in \(Int(after.rounded(.up))) seconds." }
@@ -73,10 +89,15 @@ public enum ProviderError: Error, Equatable, Sendable {
 extension ProviderError {
     /// Maps an HTTP response to an error, or nil for 2xx. `looksAdmin` is whether the key has the
     /// documented admin prefix.
-    static func map(status: Int, headers: [String: String], body: Data, provider: Provider, looksAdmin: Bool) -> ProviderError? {
+    static func map(status: Int, headers: [String: String], body: Data, provider: Provider, looksAdmin: Bool,
+                    bearer: Bool = false) -> ProviderError? {
         if (200..<300).contains(status) { return nil }
         let detail = errorMessage(from: body)
         switch status {
+        case 401 where bearer:
+            return .auth(.signInExpired, provider)
+        case 403 where bearer:
+            return .auth(.needsAdminRole, provider)
         case 401:
             return .auth(looksAdmin ? .invalidKey : .notAdminKey, provider)
         case 403:

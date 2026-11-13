@@ -4,7 +4,7 @@ import MeterCore
 import Observation
 
 public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
-    case overview, people, keys, models, budgets, connections, export
+    case overview, people, keys, models, budgets, planUsage, connections, export
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -13,6 +13,7 @@ public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
         case .keys: "Keys & Projects"
         case .models: "Models"
         case .budgets: "Budgets & Alerts"
+        case .planUsage: "Plan usage"
         case .connections: "Connections"
         case .export: "Export"
         }
@@ -24,6 +25,7 @@ public enum SidebarItem: String, CaseIterable, Identifiable, Sendable {
         case .keys: "key"
         case .models: "cpu"
         case .budgets: "gauge.with.needle"
+        case .planUsage: "gauge.medium"
         case .connections: "link"
         case .export: "square.and.arrow.up"
         }
@@ -56,6 +58,11 @@ public final class AppModel {
     private let realSecrets: any Secrets
     private let realEngine: SyncEngine
     private let notifier: any Notifying
+    /// The Anthropic CLI, the plan usage engine and the Claude Code settings editor. All nil by default, so a
+    /// test or preview never reaches a real tool or file.
+    private let ant: (any AntAuth)?
+    private let planEngine: PlanUsageEngine?
+    private let claudeSettings: StatusLineSettings?
     private let loginItem: any LoginItemControlling
     private let clock: @Sendable () -> Date
     public let isDemo: Bool
@@ -81,6 +88,9 @@ public final class AppModel {
     public private(set) var hasRealOrgs = false
     /// Set by "Add organization" in an empty state; the Connections screen opens its form and clears it.
     public var addOrganizationRequested = false
+    /// The latest plan usage rows (your plan, not API spend). Kept apart from `snapshot` on purpose.
+    public private(set) var planUsage: [PlanUsage] = []
+    public private(set) var claudeHookStatus: ClaudeHookStatus = .off
     public var selection: SidebarItem = .overview
 
     private var lastKnown = [String: Decimal]()
@@ -90,7 +100,11 @@ public final class AppModel {
 
     public init(store: MeterStore, secrets: any Secrets, engine: SyncEngine, notifier: any Notifying = NoopNotifier(),
                 loginItem: any LoginItemControlling = NoopLoginItem(), clock: @escaping @Sendable () -> Date = { Date() },
-                isDemo: Bool = false, seedDemo: Bool = false, startupNote: String? = nil) {
+                isDemo: Bool = false, seedDemo: Bool = false, startupNote: String? = nil,
+                ant: (any AntAuth)? = nil, planEngine: PlanUsageEngine? = nil, claudeSettings: StatusLineSettings? = nil) {
+        self.ant = ant
+        self.planEngine = planEngine
+        self.claudeSettings = claudeSettings
         self.store = store
         self.secrets = secrets
         self.engine = engine
@@ -128,9 +142,16 @@ public final class AppModel {
             store = try! MeterStore.inMemory()
             note = "Meter could not open its database (\(error)). Changes will not be saved."
         }
-        let engine = SyncEngine(store: store, secrets: secrets)
+        let ant = AntCLI(environment: environment)
+        let engine = SyncEngine(store: store, secrets: secrets, ant: ant)
+        let helper = Bundle.main.resourceURL?.appendingPathComponent("bin/\(StatusLineSettings.helperName)").path ?? ""
+        let claude = StatusLineSettings(settingsURL: MeterPaths.claudeSettingsURL(environment: environment),
+                                        stateURL: MeterPaths.statusLineStateURL(environment: environment), helperPath: helper)
+        let plan = PlanUsageEngine(store: store, codex: CodexPlanSource(launcher: ProcessCodexLauncher()),
+                                   claudePlanURL: MeterPaths.claudePlanURL(environment: environment),
+                                   claudeHook: { claude.status() })
         return AppModel(store: store, secrets: secrets, engine: engine, notifier: SystemNotifier(),
-                        loginItem: SystemLoginItem(), startupNote: note)
+                        loginItem: SystemLoginItem(), startupNote: note, ant: ant, planEngine: plan, claudeSettings: claude)
     }
 
     // MARK: Lifecycle
@@ -158,6 +179,8 @@ public final class AppModel {
         await realEngine.setBackgroundLegacyInterval(TimeInterval(backgroundMinutes * 60))
         await realEngine.setForeground(!surfaces.isEmpty)
         await realEngine.start()
+        await planEngine?.setForeground(!surfaces.isEmpty)
+        await planEngine?.start()
         timer = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
@@ -170,6 +193,7 @@ public final class AppModel {
         timer?.cancel()
         timer = nil
         await realEngine.stop()
+        await planEngine?.stop()
         started = false
     }
 
@@ -177,7 +201,10 @@ public final class AppModel {
     public func surface(_ s: Surface, visible: Bool) {
         if visible { surfaces.insert(s) } else { surfaces.remove(s) }
         let foreground = !surfaces.isEmpty
-        Task { await realEngine.setForeground(foreground) }
+        Task {
+            await realEngine.setForeground(foreground)
+            await planEngine?.setForeground(foreground)
+        }
         if visible { Task { await reload() } }
     }
 
@@ -204,6 +231,8 @@ public final class AppModel {
             return
         }
         now = clock()
+        planUsage = (try? await store.planUsage()) ?? []
+        claudeHookStatus = claudeSettings?.status() ?? .off
         hasRealOrgs = isPreviewing ? await realOrgsExist() : !snapshot.orgs.isEmpty
         if scope != .all, case .org(let id) = scope, snapshot.org(id) == nil { scope = .all }
         await recordLastKnown()
@@ -372,9 +401,77 @@ public final class AppModel {
 
     public func removeOrganization(id: String) async {
         guard let org = snapshot.org(id) else { return }
+        if let profile = org.credential.antProfile { await ant?.logout(profile: profile) }
         try? secrets.delete(org.keychainRef)
         try? await store.removeOrg(id: id)
         if scope == .org(id) { await setScope(.all) } else { await reload() }
+    }
+
+    /// Where `ant` is installed, nil when it is not (the form then shows the install command).
+    public func antLocation() async -> String? { await ant?.locate() }
+
+    /// "Connect with Anthropic": runs `ant auth login` for a `meter-<id>` profile (the CLI opens the browser),
+    /// saves the org with that profile name (no secret exists to store), and runs the first refresh. Cancelling
+    /// the calling Task ends the login. `existing` signs an org in again under its own profile.
+    public func connectWithAnthropic(displayName: String, existing: Org? = nil) async -> ConnectionResult {
+        func fail(_ message: String) -> ConnectionResult {
+            ConnectionResult(orgId: existing?.id ?? "", state: .error, message: message, succeeded: false)
+        }
+        guard let ant else { return fail("Signing in with the Anthropic CLI is not available here.") }
+        let profile = existing?.credential.antProfile ?? AntCommand.newProfileName()
+        do { try await ant.login(profile: profile) } catch {
+            switch error as? AntError {
+            case .notInstalled: return fail("The Anthropic CLI (ant) is not installed. Install it with: \(AntCommand.installHint)")
+            case .cancelled: return fail("Sign-in cancelled.")
+            case .timedOut: return fail("Sign-in timed out. Try again.")
+            case .loginFailed(let m): return fail(m)
+            default: return fail("Sign-in did not finish. Try again.")
+            }
+        }
+        if isPreviewing { await exitPreview() }
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var org = existing ?? Org(id: UUID().uuidString, provider: .anthropic, displayName: name.isEmpty ? "Anthropic" : name,
+                                  credential: .antProfile(profile))
+        if existing != nil, !name.isEmpty { org.displayName = name }
+        do { try await store.upsertOrg(org) } catch {
+            return fail("Could not save the organization: \(error)")
+        }
+        return await firstRefresh(org)
+    }
+
+    // MARK: Plan usage (your plan, not API spend)
+
+    public func refreshPlanUsage() async {
+        await planEngine?.refreshAll()
+        await reload()
+    }
+
+    /// What turning on the Claude Code hook would change, for the confirmation sheet.
+    public func previewClaudeHook() -> Result<StatusLineChange, StatusLineError> {
+        guard let claudeSettings else { return .failure(.helperMissing) }
+        return Result { try claudeSettings.preview() }.mapError { ($0 as? StatusLineError) ?? .writeFailed("\($0)") }
+    }
+
+    /// The explicit "Enable" click. Returns an error message, nil on success.
+    public func enableClaudeHook() async -> String? {
+        guard let claudeSettings else { return StatusLineError.helperMissing.message }
+        do { try claudeSettings.enable() } catch {
+            return ((error as? StatusLineError) ?? .writeFailed("\(error)")).message
+        }
+        await planEngine?.refreshClaude()
+        await reload()
+        return nil
+    }
+
+    /// The explicit "Disable" click: restores the saved status line exactly.
+    public func disableClaudeHook() async -> String? {
+        guard let claudeSettings else { return StatusLineError.notEnabled.message }
+        do { try claudeSettings.disable() } catch {
+            return ((error as? StatusLineError) ?? .writeFailed("\(error)")).message
+        }
+        await planEngine?.refreshClaude()
+        await reload()
+        return nil
     }
 
     private func firstRefresh(_ org: Org) async -> ConnectionResult {

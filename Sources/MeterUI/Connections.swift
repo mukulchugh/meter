@@ -44,6 +44,8 @@ public struct ConnectionsContent: Equatable, Sendable {
 }
 
 public enum ConnectionHelp {
+    public static let antNote = "Connect with Anthropic opens your browser through Anthropic's own CLI (ant). Meter never sees your password and stores no key: ant keeps the sign-in, and Meter asks it for a short-lived token before each refresh. You need the admin, owner or primary owner role in a Console organization."
+
     public static let organizationNote = "Spend data needs an organization account: individual accounts can't read it with any key."
 
     public static func steps(for provider: Provider) -> String {

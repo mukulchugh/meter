@@ -252,7 +252,7 @@ None of these is large. Ranked options:
 |---|---|---|---|
 | 1 | **Run CodexBar with the two admin keys, today.** Judge whether the gap matters. | 30 min | Covers glance and trend. |
 | 2 | **Contribute upstream** to CodexBar: Keychain storage for admin keys, per-key breakdown, budget notifications. Needs owner sign-off per VISION.md, so open an issue first. | Days, uncertain merge | Best outcome if accepted, no new app to maintain. |
-| 3 | **Build Meter narrowly** as scoped in section 13: two providers only, Keychain, breakdowns, budgets, 365-day local history. | 1 to 2 weeks | Only worthwhile if 1 and 2 are rejected or the "no cookie or OAuth-reuse surface" property matters to the owner. |
+| 3 | **Build Meter narrowly** as scoped in section 15: two providers only, Keychain, breakdowns, budgets, 365-day local history. | 1 to 2 weeks | Only worthwhile if 1 and 2 are rejected or the "no cookie or OAuth-reuse surface" property matters to the owner. |
 | 4 | Add **ccusage** alongside for local agent logs | minutes | Complementary, not a substitute. |
 | 5 | Proxy/observability stacks (Helicone, Langfuse, LiteLLM) | high | Needs a server and traffic rerouting. Contradicts "no server". |
 
@@ -339,9 +339,66 @@ Recommendation: plain SecItem on the file-based keychain, generic password, `kSe
 | 6 | Subscription limits via statusline helper and `codex app-server` | Official surfaces, local | Limits percent and reset times, not dollars | Setup per tool | Optional v1.1 module. |
 | 7 | Cookie scraping, token reuse of Claude Code or Codex logins | Violates or risks vendor terms | Whatever the private API returns | Looks easy, breaks often | **Recommend against.** |
 
+Update 2026-11-13: options 2 and 6 are now built. Their verified details, including the refresh behaviour that option 2 listed as a spike, are in section 13.
+
 ---
 
-## 13. Local storage
+## 13. Login and plan usage, verified
+
+Added 2026-11-13. Primary sources only, read on 2026-11-13. Nothing here was run against a real account: `ant` is not installed on the research machine, `codex auth` state was not read, and `ant auth login` and `codex login` were never run. Pinned source revisions: `anthropics/anthropic-cli` main `00f918c5127ffff1d33bc24ad8187c144eadcdd8` (latest release `v2.9.0`), `openai/codex` main `69231e119bfca0b14453515e97d99688ce1c47c9`.
+
+### 13.1 Anthropic `ant` CLI: verified
+
+| Question | Answer | Source |
+|---|---|---|
+| Name, repo | The Anthropic CLI, command `ant`. Repo `github.com/anthropics/anthropic-cli`, Apache-2.0, "The CLI for the Claude API". | https://platform.claude.com/docs/en/cli-sdks-libraries/cli/quickstart.md ; GitHub API for the repo |
+| Install | macOS: `brew install anthropics/tap/ant`. Linux/WSL: release tarball `https://github.com/anthropics/anthropic-cli/releases/download/v${VERSION}/ant_${VERSION}_${OS}_${ARCH}.tar.gz`. From source: `go install github.com/anthropics/anthropic-cli/v2/cmd/ant@latest` (Go 1.26.10 or later). No npm package is documented. Check with `ant --version`. | quickstart.md |
+| Login | `ant auth login --profile <name> --scope "org:admin"`. Opens a browser OAuth flow against the Claude Console. `--no-browser` prints the URL instead. A profile that does not exist is created. `--timeout` (default 5 minutes) is how long it waits for the browser. `--admin` is a flag that adds `org:admin` to the default scope; `--scope` replaces the default (`user:profile user:inference user:developer`). | https://platform.claude.com/docs/en/cli-sdks-libraries/cli/authentication.md ; `pkg/cmd/cmd_auth.go` |
+| Who gets `org:admin` | "granted only to organization members with the admin, owner, or primary owner role". The token has organization-wide access; a workspace binding on the profile does not constrain it. | authentication.md, "Admin access" |
+| Print a token | `ant auth print-credentials --profile <name> --access-token` prints the bare access token and a newline on stdout. Without `--access-token` it prints the credentials JSON (the shape of `credentials/<profile>.json`: `access_token`, `expires_at`, `refresh_token`, and scope and organization fields). `--env` prints `ANTHROPIC_AUTH_TOKEN=...` lines. | authentication.md ; `cmd_auth.go` (`authPrintCredentials`) |
+| Refresh | The command is described as "refreshing the access token if it is expired or near expiry". In the source it refreshes when the token has 120 seconds or less left, using the stored refresh token, and rewrites the credentials file. If the refresh fails it prints a warning on **stderr and still exits 0 with the old token**, so a caller must treat a later 401 as "sign in again". Docs: "Interactive tokens are short-lived. If requests start returning 401, rerun the export command to refresh the token." | `cmd_auth.go`; https://platform.claude.com/docs/en/manage-claude/admin-api.md ("Obtain an OAuth bearer token") |
+| Where credentials live | `$ANTHROPIC_CONFIG_DIR`, else `~/.config/anthropic` on Linux and macOS. `credentials/<profile>.json` (access token, `expires_at`, refresh token; mode 0600, a plain file, not the Keychain), `configs/<profile>.json` (non-secret), `active_config` (one line). | https://platform.claude.com/docs/en/manage-claude/wif-reference.md ("File layout") |
+| Side effect of login | An explicit `--profile` makes that profile the user's **active** profile (source: `wantActivate := c.Root().IsSet("profile") || prevActive == ""`). Meter reads `active_config` first and runs `ant profile activate <previous or default>` afterwards. | `cmd_auth.go` (`authLogin`) |
+| Logout | `ant auth logout --profile <name>` revokes the tokens and removes `credentials/<profile>.json`. The profile config file stays (non-secret). `ant auth logout --all` clears everything and is never used by Meter. | `cmd_auth.go` (`authLogout`) |
+| Bearer on Meter's endpoints | The Admin API accepts "an OAuth bearer token with the `org:admin` scope sent in the `authorization: Bearer` header". The Usage and Cost (legacy), Usage and Cost Analytics and Claude Code Analytics pages each say the endpoints are part of the Admin API and list "an OAuth token with the `org:admin` scope" as an accepted credential. Docs example: `authorization: Bearer $TOKEN` plus `anthropic-version: 2026-10-21`. | admin.md ; https://platform.claude.com/docs/en/manage-claude/usage-cost-api.md ; usage-cost-analytics-api.md ; claude-code-analytics-api.md |
+
+What Meter does with this: per org it stores only a profile name `meter-<8 hex>`; before each sync pass it runs `print-credentials --profile <name> --access-token` (15 second limit), sends `authorization: Bearer <token>` instead of `x-api-key` (same `anthropic-version`; the analytics beta header is unchanged), keeps the token in memory for that pass, and never writes it to the database, Keychain or logs.
+
+Not verified (no live call was made): that the **analytics beta header combination** works with a bearer token (the docs name the credential type for these endpoints but their curl examples all use `x-api-key`); the actual token lifetime in seconds (docs say only "short-lived"); what `ant auth login --scope org:admin` does for a user without the admin role (the source prints a warning that the scope "was requested but not granted" and exits 0, which Meter reports as "your account needs the admin role"; if the token is still issued, the first sync gets a 403, which Meter maps to the same message); behaviour on Intel Macs and with `ant` installed outside the four searched locations. The CLI docs call interactive login "intended for local development and scripting on your own machine", which matches Meter's use on the CTO's own Mac; whether Anthropic is comfortable with a third-party app driving it is an owner judgement.
+
+### 13.2 Codex plan limits: verified from docs and schema
+
+| Question | Answer | Source |
+|---|---|---|
+| Start | `codex app-server`. Default transport is stdio, newline-delimited JSON (JSONL), JSON-RPC 2.0 with the `"jsonrpc":"2.0"` field omitted. | https://learn.chatgpt.com/docs/app-server.md (the old `developers.openai.com/codex/app-server.md` redirects here with HTTP 308) |
+| Handshake | Send `{"method":"initialize","id":0,"params":{"clientInfo":{"name":"...","title":"...","version":"..."}}}`, wait for the reply, then send the notification `{"method":"initialized","params":{}}`. Requests before this get `Not initialized`. | app-server.md, "Initialization" |
+| Who is logged in | `{"method":"account/read","id":1,"params":{"refreshToken":false}}` returns `{"account":null,"requiresOpenaiAuth":...}` when nobody is signed in, `{"account":{"type":"apiKey"}}` for an API key, `{"account":{"type":"chatgpt","email":...,"planType":"pro"}}` for a ChatGPT login, `{"account":{"type":"amazonBedrock",...}}` for Bedrock. | app-server.md, "Auth endpoints" |
+| Limits | `{"method":"account/rateLimits/read","id":6}`. Result: `rateLimits` (single bucket, backward compatible), `rateLimitsByLimitId` (multi bucket keyed by metered limit id such as `codex`), `rateLimitResetCredits`, and more. Each bucket: `limitId`, `limitName`, `primary`, `secondary` (each `null` or `{usedPercent, windowDurationMins, resetsAt}`; `resetsAt` is Unix seconds; `windowDurationMins` can be null), `credits`, `planType`, `rateLimitReachedType`. There is also a notification `account/rateLimits/updated`. The window lengths are not fixed: the docs example shows a 15-minute primary window, so Meter names windows from `windowDurationMins` and never by position. | app-server.md section "Rate limits (ChatGPT)"; `codex-rs/app-server-protocol/schema/typescript/v2/{GetAccountRateLimitsResponse,RateLimitSnapshot,RateLimitWindow}.ts` |
+| Plan types | `free, go, plus, pro, prolite, promax, team, self_serve_business_prolite, self_serve_business_usage_based, business, ent26, enterprise_cbp_automation, enterprise_cbp_usage_based, enterprise, edu, edu_plus, edu_pro, sci, sci_plus, unknown` | `schema/typescript/PlanType.ts` |
+
+Meter's flow: spawn, handshake, `account/read`; `account: null` means not signed in (the limits call is not made), `type: apiKey` or any non-ChatGPT type means "no plan limits" (the limits call is not made), `type: chatgpt` means read the limits and show them. Whatever `codex` itself has stored is used; Meter never reads `~/.codex/auth.json`, never starts a login and never passes credentials.
+
+Not verified: no real `codex app-server` was started, so the parser is checked against the documented JSON and schema only; what `account/rateLimits/read` returns for an API-key login (Meter never asks); the cadence at which ChatGPT refreshes the numbers server side. The same docs page says app-server authentication "has never been permitted for commercial or hosted services". Meter is a local, personal tool that reuses an existing login through the official client and never handles tokens, which is the same reading as section 12.2, but the owner should be aware of the sentence before distributing Meter widely.
+
+### 13.3 Claude Code plan limits: verified
+
+Source: https://code.claude.com/docs/en/statusline.md.
+
+- **Configuration** (`~/.claude/settings.json`, or project settings): `"statusLine": {"type": "command", "command": "<script path or inline command>", "padding": 2}`. Optional `padding` (extra horizontal characters, default 0), `refreshInterval` (seconds, minimum 1, extra re-runs) and `hideVimModeIndicator`.
+- **Input:** the command runs in a shell, receives the session JSON on **stdin**, and whatever it prints to **stdout** is shown (several lines become several rows; ANSI colours and OSC 8 links work). Updates are debounced by 300 ms and an in-flight run is cancelled when a new update arrives. Until the workspace trust dialog is accepted the status line stays blank.
+- **Plan fields:** `rate_limits.five_hour.used_percentage` and `rate_limits.seven_day.used_percentage` (0 to 100) and `rate_limits.five_hour.resets_at` and `rate_limits.seven_day.resets_at` (Unix epoch seconds). The `rate_limits` object "appears only for claude.ai Pro, Max, and Ultra subscribers" (or behind a Claude apps gateway with a spend limit, which adds `rate_limits.spend_limit`, not used by Meter), "only after the first API response in the session". Each window may be independently absent, and a window is dropped once its `resets_at` passes.
+- **Other fields used:** `model.id` and `model.display_name`. The documented input has **no plan name** field (Pro, Max, Ultra), so Meter shows "Claude plan" and cannot say "Claude Max".
+- Meter's helper only writes when at least one window is present, so a session that has not made its first API call never erases the last good reading.
+
+Not verified: precedence when a project-level `.claude/settings.json` also sets `statusLine` (Meter edits only the user file, so such a project would not feed Meter); whether Claude Code re-reads `settings.json` live after Meter edits it (the docs say a changed `command` runs immediately, which suggests yes).
+
+### 13.4 Not verified anywhere above
+
+No live bearer request; no real `ant` or `codex` run; `ant auth login` without the admin role; token lifetime; the app-server commercial-use sentence; project-level status line precedence. All behaviour in Meter for these is covered by fakes and by the plain-language error states.
+
+---
+
+## 14. Local storage
 
 Data model: one row per (provider, day, dimension set) with cost in integer micro-dollars and optional tokens. Store daily aggregates only. Do not store raw API responses.
 
@@ -355,7 +412,7 @@ Anthropic Analytics API only looks back 365 days from now and not before 2026-01
 
 ---
 
-## 14. Proposed v1 scope
+## 15. Proposed v1 scope
 
 ### Screens
 1. **Menu bar glance** (popover): today, month to date, last 7 or 30 day sparkline, per vendor and combined. Shows "data as of <time>" using Anthropic `data_refreshed_at` and the poll time. Badge when a budget is near.

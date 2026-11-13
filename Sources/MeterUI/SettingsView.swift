@@ -15,7 +15,11 @@ public struct SettingsRoot: View {
             setMetric: { model.setMenuMetric($0) },
             setScope: { s in Task { await model.setScope(s) } },
             setMinutes: { m in Task { await model.setBackgroundMinutes(m) } },
-            setLaunch: { model.setLaunchAtLogin($0) })
+            setLaunch: { model.setLaunchAtLogin($0) },
+            claudeHook: model.claudeHookStatus,
+            previewHook: { model.previewClaudeHook() },
+            enableHook: { await model.enableClaudeHook() },
+            disableHook: { await model.disableClaudeHook() })
     }
 }
 
@@ -32,6 +36,10 @@ struct SettingsForm: View {
     let setScope: @MainActor @Sendable (Scope) -> Void
     let setMinutes: @MainActor @Sendable (Int) -> Void
     let setLaunch: @MainActor @Sendable (Bool) -> Void
+    let claudeHook: ClaudeHookStatus
+    let previewHook: () -> Result<StatusLineChange, StatusLineError>
+    let enableHook: () async -> String?
+    let disableHook: () async -> String?
 
     var body: some View {
         Form {
@@ -47,13 +55,19 @@ struct SettingsForm: View {
             }
             Text("While Meter is open it refreshes every minute.").font(.caption).foregroundStyle(.secondary)
             Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: setLaunch))
+            Section("Plan usage") {
+                Text("\(PlanLabel.basis). Codex needs nothing: Meter asks the codex app on this Mac, using your own login.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Claude Code").font(.callout.weight(.medium))
+                ClaudeHookSection(status: claudeHook, preview: previewHook, enable: enableHook, disable: disableHook)
+            }
             Toggle("Preview with sample data", isOn: Binding(get: { previewing }, set: setPreview)).disabled(!canPreview)
             Text(canPreview ? "Shows a made-up company so you can look around. Nothing is saved to your real data and no keys are used."
                  : "Sample data is only offered before an organization is connected.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
-        .frame(width: 440)
+        .frame(width: 480)
         .padding(.vertical, 8)
     }
 }

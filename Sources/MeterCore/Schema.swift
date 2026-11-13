@@ -121,5 +121,20 @@ enum Schema {
             """,
             "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
         ],
+        // 2: how an org signs in (`key` or `ant:<profile>`, never a secret), and plan usage. Plan usage is a
+        // separate product from API spend (UX-RESEARCH section 1): its own table, read by no spend query.
+        [
+            "ALTER TABLE orgs ADD COLUMN credential TEXT NOT NULL DEFAULT 'key'",
+            """
+            CREATE TABLE plan_usage (
+                provider TEXT PRIMARY KEY,
+                plan_name TEXT,
+                windows TEXT NOT NULL,
+                fetched_at REAL NOT NULL,
+                state TEXT NOT NULL,
+                detail TEXT
+            )
+            """,
+        ],
     ]
 }

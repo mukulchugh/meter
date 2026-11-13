@@ -38,7 +38,8 @@ public struct PopoverRoot: View {
 
     public var body: some View {
         PopoverView(
-            content: model.popover, isRefreshing: model.isRefreshing, startupNote: model.startupNote,
+            content: model.popover, plans: PlanUsageContent(plans: model.planUsage, now: model.now).popoverRows,
+            isRefreshing: model.isRefreshing, startupNote: model.startupNote,
             banner: model.previewBanner,
             addOrganization: { model.beginAddOrganization(); openWindow(id: MeterWindowID.main); activateApp() },
             startPreview: { Task { await model.enterPreview() } },
@@ -54,6 +55,8 @@ public struct PopoverRoot: View {
 /// Light on purpose: no tables, no legends. Scope, total, orgs, a week, the budget, three buttons.
 struct PopoverView: View {
     let content: PopoverContent
+    /// Plan usage rows worth showing (your plan, not API spend). Empty when no tool is set up.
+    var plans: [PlanRow] = []
     let isRefreshing: Bool
     let startupNote: String?
     let banner: PreviewBanner?
@@ -142,6 +145,20 @@ struct PopoverView: View {
                     }
                     BudgetProgress(fraction: b.fraction, exceeded: b.exceeded)
                     Text("Monthly budget, \(BudgetBar.note)").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+
+            // Plan usage: one quiet line per tool, labelled as the plan and kept out of the spend above.
+            if !plans.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(PlanLabel.sectionTitle).font(.caption.weight(.semibold))
+                        Text(PlanLabel.basis).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    ForEach(plans) { p in
+                        Text(p.summary).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                            .accessibilityLabel("\(PlanLabel.basis). \(p.summary)")
+                    }
                 }
             }
 

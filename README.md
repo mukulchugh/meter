@@ -25,6 +25,22 @@ The Admin API needs an organization account. Individual accounts cannot create a
 
 Admin keys are stored in the macOS Keychain, never in Meter's database or in any file. Use Rotate key in Connections to replace one, or Remove to delete it along with that organization's local history.
 
+### Or sign in with Anthropic, no key to paste
+
+For Anthropic you can use Connections, then **Connect with Anthropic** instead of an admin key. It uses Anthropic's own CLI, `ant`, and needs the admin, owner or primary owner role in a Console organization.
+
+- Install the CLI once: `brew install anthropics/tap/ant` (Meter shows this command if it cannot find `ant`).
+- Meter runs `ant auth login --scope org:admin` for a private profile named `meter-<id>`; `ant` opens your browser. Meter shows "Finish signing in in your browser" with a Cancel button, then loads history like the key flow.
+- Meter stores only the profile name. `ant` keeps the sign-in (under `~/.config/anthropic`) and refreshes it; before each refresh Meter asks `ant` for a short-lived token, uses it for that one request in memory, and never saves it. Your own `ant` default profile is left as it was.
+- If the sign-in expires, the row says "sign-in needed" and the button becomes Sign in again. Remove signs the profile out with `ant auth logout`.
+
+## Plan usage (your plan, not API spend)
+
+Plan usage is how much of a Claude or ChatGPT subscription allowance is used. It is a different product from API spend: it has no dollar value, is shown in its own **Plan usage** screen and as a short line in the popover labelled "Your plan, not API spend", and is never added to any spend total or export.
+
+- **Codex (ChatGPT plan):** nothing to set up. Meter asks the `codex` app on your Mac (`codex app-server`) for the limits of the account you are already signed in with. It refreshes every 5 minutes while Meter is open and every 30 minutes otherwise. It tells you if Codex is not installed, not signed in, or signed in with an API key (which has no plan limits). Meter never reads Codex's login files.
+- **Claude Code (Pro, Max, Ultra):** Claude Code passes its 5-hour and weekly limits to a status line command. In Settings, Plan usage, press **Enable**. Meter first shows exactly what it will change in `~/.claude/settings.json`, saves a backup next to it (`settings.json.meter-backup-<time>`), and points `statusLine` at a small helper bundled in `Meter.app/Contents/Resources/bin/meter-statusline`. The helper records the limits to `~/Library/Application Support/Meter/claude-plan.json` and then runs your previous status line command, if you had one, so your status line looks the same. **Disable** puts your original `statusLine` back exactly. Meter touches that file only when you press Enable or Disable. Claude Code reports limits only after its first reply in a session, so readings go stale (and say so) after an hour without use. The status line input does not include the plan name, so it reads "Claude plan".
+
 ## Try it with sample data
 
 With no organization connected, the popover and every empty screen offer Preview with sample data (the same switch is in Settings). It shows a made-up company with two Anthropic organizations and one OpenAI organization, a budget, a spend spike, a delayed report, and Claude Code activity for eight people. Sample data lives only in memory: it never touches your real data or Keychain, a banner reads "Sample data. Not your spend.", and Exit preview or adding a real organization ends it. Your choice is remembered across launches.
@@ -35,7 +51,7 @@ Everything stays on your Mac.
 
 - Spend history is stored locally in `~/Library/Application Support/Meter`.
 - Admin keys are in the Keychain.
-- The only network calls are to the Anthropic and OpenAI admin APIs, using your keys, to read cost and usage.
+- The only network calls are to the Anthropic and OpenAI admin APIs, using your keys or your `ant` sign-in, to read cost and usage. Plan usage makes no network call of its own: Codex's own app does, and the Claude helper only writes a local file.
 - No telemetry, no analytics, no crash reporting, no accounts.
 
 ## Build from source
@@ -44,7 +60,7 @@ You need the Swift toolchain (Command Line Tools are enough) on macOS 26.
 
 ```
 scripts/test-swift.sh        # both test suites; warnings are errors
-scripts/bundle-app.sh        # builds dist/Meter.app (METER_UNIVERSAL=1 for Apple silicon and Intel)
+scripts/bundle-app.sh        # builds dist/Meter.app, including the meter-statusline helper (METER_UNIVERSAL=1 for Apple silicon and Intel)
 ```
 
 `scripts/bundle-app.sh` signs with the self-signed identity "Mukul Chugh Local Code Signing" when it is in your keychain and falls back to ad-hoc signing otherwise. Releases are described in `docs/RELEASING.md`. Design notes are in `docs/PLAN.md` and `docs/CORE.md`.

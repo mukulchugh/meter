@@ -34,17 +34,43 @@ public struct KeychainRef: Sendable, Hashable, Codable {
     }
 }
 
+/// How Meter authenticates to an org. Neither case carries a secret: keys live in the Keychain, and an
+/// `ant` profile is just a name, because the Anthropic CLI owns those credentials.
+public enum OrgCredential: Sendable, Hashable, Codable {
+    case apiKey
+    case antProfile(String)
+
+    public var raw: String {
+        switch self {
+        case .apiKey: "key"
+        case .antProfile(let p): "ant:\(p)"
+        }
+    }
+
+    public init(raw: String) {
+        if raw.hasPrefix("ant:"), raw.count > 4 { self = .antProfile(String(raw.dropFirst(4))) } else { self = .apiKey }
+    }
+
+    public init(from decoder: Decoder) throws { self.init(raw: try decoder.singleValueContainer().decode(String.self)) }
+    public func encode(to encoder: Encoder) throws { var c = encoder.singleValueContainer(); try c.encode(raw) }
+
+    public var antProfile: String? { if case .antProfile(let p) = self { p } else { nil } }
+}
+
 public struct Org: Sendable, Hashable, Codable, Identifiable {
     public let id: String
     public var provider: Provider
     public var displayName: String
     public var keychainRef: KeychainRef
+    public var credential: OrgCredential
 
-    public init(id: String, provider: Provider, displayName: String, keychainRef: KeychainRef? = nil) {
+    public init(id: String, provider: Provider, displayName: String, keychainRef: KeychainRef? = nil,
+                credential: OrgCredential = .apiKey) {
         self.id = id
         self.provider = provider
         self.displayName = displayName
         self.keychainRef = keychainRef ?? .forOrg(id: id)
+        self.credential = credential
     }
 }
 

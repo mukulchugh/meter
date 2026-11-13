@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "MeterCore", targets: ["MeterCore"]),
         .library(name: "MeterUI", targets: ["MeterUI"]),
         .executable(name: "MeterApp", targets: ["MeterApp"]),
+        .executable(name: "meter-statusline", targets: ["MeterStatusline"]),
     ],
     targets: [
         .target(
@@ -21,6 +22,8 @@ let package = Package(
         ),
         .target(name: "MeterUI", dependencies: ["MeterCore"]),
         .executableTarget(name: "MeterApp", dependencies: ["MeterUI", "MeterCore"]),
+        // Claude Code's status line command, bundled in Meter.app/Contents/Resources/bin.
+        .executableTarget(name: "MeterStatusline", dependencies: ["MeterCore"]),
         .testTarget(name: "MeterUITests", dependencies: ["MeterUI", "MeterCore"]),
     ]
 )

@@ -4,6 +4,7 @@ import SwiftUI
 struct ConnectionsView: View {
     let model: AppModel
     @State private var adding = false
+    @State private var connecting: ConnectTarget?
     @State private var rotating: ConnectionRow?
     @State private var removing: ConnectionRow?
 
@@ -13,9 +14,10 @@ struct ConnectionsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Organizations").font(.title3.weight(.semibold))
-                    Text("Admin keys are stored in the Keychain. Meter reads cost and usage only.").font(.caption).foregroundStyle(.secondary)
+                    Text("Admin keys are stored in the Keychain, or sign in with Anthropic's CLI and store nothing. Meter reads cost and usage only.").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button("Connect with Anthropic", systemImage: "person.badge.key") { connecting = .new }
                 Button("Add organization", systemImage: "plus") { adding = true }.buttonStyle(.borderedProminent)
             }
             if c.rows.isEmpty {
@@ -25,7 +27,8 @@ struct ConnectionsView: View {
                 }
             }
             ForEach(c.rows) { r in
-                ConnectionCard(row: r, rotate: { rotating = r }, remove: { removing = r })
+                ConnectionCard(row: r, rotate: { if r.org.credential == .apiKey { rotating = r } else { connecting = .again(r.org) } },
+                               remove: { removing = r })
             }
             Card("Where to create an admin key") {
                 ForEach(Provider.allCases, id: \.self) { p in
@@ -35,6 +38,7 @@ struct ConnectionsView: View {
                     }
                 }
                 Label(ConnectionHelp.organizationNote, systemImage: "info.circle").font(.callout)
+                Label(ConnectionHelp.antNote, systemImage: "person.badge.key").font(.callout)
             }
         }
         .onAppear(perform: consumeAddRequest)
@@ -43,6 +47,13 @@ struct ConnectionsView: View {
             AddOrganizationForm(
                 save: { draft in await model.addOrganization(draft) },
                 close: { adding = false })
+        }
+        .sheet(item: $connecting) { target in
+            ConnectAnthropicForm(
+                again: target.org,
+                locate: { await model.antLocation() },
+                connect: { name in await model.connectWithAnthropic(displayName: name, existing: target.org) },
+                close: { connecting = nil })
         }
         .sheet(item: $rotating) { row in
             RotateKeyForm(
@@ -54,7 +65,7 @@ struct ConnectionsView: View {
                             presenting: removing) { r in
             Button("Remove \(r.org.displayName)", role: .destructive) { Task { await model.removeOrganization(id: r.id) } }
         } message: { _ in
-            Text("This deletes its stored key and its local history. Provider data is not touched.")
+            Text("This deletes its stored key or Anthropic sign-in and its local history. Provider data is not touched.")
         }
     }
 }
@@ -77,11 +88,11 @@ struct ConnectionCard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(row.org.displayName).font(.callout.weight(.medium))
-                    Text("\(row.org.provider.displayName), \(row.lastReportText)").font(.caption).foregroundStyle(.secondary)
+                    Text("\(row.org.provider.displayName)\(row.org.credential == .apiKey ? "" : ", signed in with ant"), \(row.lastReportText)").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 StateBadge(state: row.state)
-                Button("Rotate key", action: rotate)
+                Button(row.org.credential == .apiKey ? "Rotate key" : "Sign in again", action: rotate)
                 Button("Remove", role: .destructive, action: remove)
             }
             if let e = row.errorText { Text(e).font(.caption).foregroundStyle(.red) }
@@ -185,5 +196,78 @@ struct RotateKeyForm: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .padding(.vertical, 8)
+    }
+}
+
+/// Which sign-in the sheet is for: a new organization, or an existing one signing in again.
+enum ConnectTarget: Identifiable, Equatable {
+    case new
+    case again(Org)
+    var id: String { switch self { case .new: "new"; case .again(let o): o.id } }
+    var org: Org? { if case .again(let o) = self { o } else { nil } }
+}
+
+/// "Connect with Anthropic": the Anthropic CLI does the browser sign-in. Meter shows the install command
+/// when `ant` is missing, "Finish signing in in your browser" with Cancel while it waits, then the result.
+struct ConnectAnthropicForm: View {
+    let again: Org?
+    let locate: () async -> String?
+    let connect: (String) async -> ConnectionResult
+    let close: () -> Void
+    @State private var name = ""
+    @State private var antPath: String??
+    @State private var task: Task<Void, Never>?
+    @State private var result: ConnectionResult?
+
+    private var signingIn: Bool { task != nil }
+
+    var body: some View {
+        Form {
+            Section(again == nil ? "Connect with Anthropic" : "Sign in again to \(again?.displayName ?? "Anthropic")") {
+                if again == nil {
+                    TextField("Display name", text: $name, prompt: Text("Anthropic"))
+                }
+                Text(ConnectionHelp.antNote).font(.caption).foregroundStyle(.secondary)
+                if case .some(.none) = antPath {
+                    Label("The Anthropic CLI (ant) is not installed. Install it, then check again:", systemImage: "terminal")
+                        .font(.callout)
+                    Text(AntCommand.installHint).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                    Button("Check again") { Task { antPath = .some(await locate()) } }
+                }
+            }
+            if signingIn {
+                Section {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Finish signing in in your browser…").font(.callout)
+                    }
+                }
+            }
+            if let r = result {
+                Section("Result") { HStack { StateBadge(state: r.state); Text(r.message).font(.callout) } }
+            }
+            HStack {
+                Spacer()
+                Button(signingIn ? "Cancel" : (result?.succeeded == true ? "Done" : "Close")) {
+                    if signingIn { task?.cancel() } else { close() }
+                }.keyboardShortcut(.cancelAction)
+                if result?.succeeded != true {
+                    Button(again == nil ? "Sign in" : "Sign in again") {
+                        result = nil
+                        task = Task {
+                            let r = await connect(name)
+                            result = r
+                            task = nil
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                    .disabled(signingIn || antPath == .some(.none))
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 480)
+        .padding(.vertical, 8)
+        .task { antPath = .some(await locate()) }
     }
 }

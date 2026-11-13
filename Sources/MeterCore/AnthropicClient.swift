@@ -31,6 +31,21 @@ public struct AnthropicClient: ProviderClient {
             looksAdmin: apiKey.hasPrefix("sk-ant-admin"))
     }
 
+    /// Signed in with the `ant` CLI: `authorization: Bearer <token>` instead of `x-api-key`. The Admin API,
+    /// Usage and Cost and Claude Code analytics endpoints accept an `org:admin` token (RESEARCH.md section
+    /// 13). The token is held only by this value, which lives for one sync pass.
+    public init(orgId: String, bearerToken: String, transport: any HTTPTransport, baseURL: URL = AnthropicClient.baseURL) {
+        self.orgId = orgId
+        self.core = APIClientCore(
+            transport: transport, baseURL: baseURL, provider: .anthropic,
+            baseHeaders: [
+                "authorization": "Bearer \(bearerToken)",
+                "anthropic-version": Self.version,
+                "user-agent": "Meter/1.0 (local menu bar app)",
+            ],
+            looksAdmin: true, bearer: true)
+    }
+
     private func iso(_ d: Date) -> String { ISODate.format(d) }
 
     // MARK: Costs

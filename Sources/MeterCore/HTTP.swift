@@ -54,6 +54,8 @@ struct APIClientCore: Sendable {
     let provider: Provider
     let baseHeaders: [String: String]
     let looksAdmin: Bool
+    /// True when the credential is an OAuth bearer token from `ant`, which changes how 401 and 403 read.
+    var bearer = false
 
     func get(_ path: String, query: [(String, String)] = [], extraHeaders: [String: String] = [:]) async throws -> JSON {
         var comps = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
@@ -73,7 +75,7 @@ struct APIClientCore: Sendable {
             throw ProviderError.network(error.localizedDescription)
         }
         if let err = ProviderError.map(status: response.status, headers: response.headers, body: response.body,
-                                       provider: provider, looksAdmin: looksAdmin) {
+                                       provider: provider, looksAdmin: looksAdmin, bearer: bearer) {
             throw err
         }
         do { return try JSON.parse(response.body) } catch {
