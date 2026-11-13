@@ -145,6 +145,8 @@ public struct PopoverContent: Equatable, Sendable {
     public var week: [ChartPoint]
     public var budget: BudgetBar?
     public var title: MenuBarTitle
+    /// False before the first organization exists: the popover shows its empty state instead.
+    public var hasOrgs: Bool
 
     public var todayText: String { Fmt.reading(today) }
 
@@ -152,6 +154,7 @@ public struct PopoverContent: Equatable, Sendable {
         let filter = scope.filter
         let day = UTCDay(now)
         scopeLabel = scope.label(in: snapshot)
+        hasOrgs = !snapshot.orgs.isEmpty
         today = snapshot.today(now: now, filter: filter)
         split = snapshot.totalsByTag(from: day, to: day, filter: filter).map { SplitRow(tag: $0.tag, reading: $0.reading) }
 

@@ -37,6 +37,8 @@ public enum SettingKey {
     public static let backgroundPoll = "poll.background"
     public static let dismissedSuggestions = "tags.dismissed"
     public static let alertsEnabled = "alerts.enabled"
+    /// "1" while the sample-data preview is on. The one thing preview writes to the real store.
+    public static let previewSampleData = "preview.sample_data"
     static func lastKnown(_ metric: MenuMetric, _ scope: Scope) -> String { "ui.last_known.\(metric.rawValue).\(scope.raw)" }
 }
 
@@ -44,10 +46,14 @@ public enum SettingKey {
 /// the latest immutable snapshot. All numbers come from MeterCore queries over that snapshot.
 @Observable @MainActor
 public final class AppModel {
-    // Dependencies
-    public let store: MeterStore
-    public let secrets: any Secrets
-    public let engine: SyncEngine
+    // Dependencies. `store`, `secrets` and `engine` are the active set: the real ones, or the in-memory
+    // sample set while the preview is on. Nothing in the preview ever touches the real set.
+    public private(set) var store: MeterStore
+    public private(set) var secrets: any Secrets
+    public private(set) var engine: SyncEngine
+    private let realStore: MeterStore
+    private let realSecrets: any Secrets
+    private let realEngine: SyncEngine
     private let notifier: any Notifying
     private let loginItem: any LoginItemControlling
     private let clock: @Sendable () -> Date
@@ -68,6 +74,12 @@ public final class AppModel {
     public private(set) var launchAtLogin = false
     public private(set) var dismissedSuggestions = Set<String>()
     public private(set) var alertsEnabled = false
+    /// True while the sample-data preview is showing instead of real data.
+    public private(set) var isPreviewing = false
+    /// True when at least one real organization is connected (preview is then not offered).
+    public private(set) var hasRealOrgs = false
+    /// Set by "Add organization" in an empty state; the Connections screen opens its form and clears it.
+    public var addOrganizationRequested = false
     public var selection: SidebarItem = .overview
 
     private var lastKnown = [String: Decimal]()
@@ -81,6 +93,9 @@ public final class AppModel {
         self.store = store
         self.secrets = secrets
         self.engine = engine
+        self.realStore = store
+        self.realSecrets = secrets
+        self.realEngine = engine
         self.notifier = notifier
         self.loginItem = loginItem
         self.clock = clock
@@ -125,6 +140,10 @@ public final class AppModel {
             try? await DemoData.seed(store: store, secrets: secrets, engine: engine, now: now)
         }
         await loadSettings()
+        if !isDemo, (try? await realStore.setting(SettingKey.previewSampleData)) == "1" {
+            // A saved preview choice only holds while no real organization exists.
+            if await realOrgsExist() { try? await realStore.setSetting(SettingKey.previewSampleData, "0") } else { await activatePreview() }
+        }
         launchAtLogin = loginItem.isEnabled
         await reload()
         isLoaded = true
@@ -135,9 +154,9 @@ public final class AppModel {
         guard !started else { return }
         started = true
         await load()
-        await engine.setBackgroundLegacyInterval(TimeInterval(backgroundMinutes * 60))
-        await engine.setForeground(!surfaces.isEmpty)
-        await engine.start()
+        await realEngine.setBackgroundLegacyInterval(TimeInterval(backgroundMinutes * 60))
+        await realEngine.setForeground(!surfaces.isEmpty)
+        await realEngine.start()
         timer = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
@@ -149,7 +168,7 @@ public final class AppModel {
     public func stop() async {
         timer?.cancel()
         timer = nil
-        await engine.stop()
+        await realEngine.stop()
         started = false
     }
 
@@ -157,22 +176,21 @@ public final class AppModel {
     public func surface(_ s: Surface, visible: Bool) {
         if visible { surfaces.insert(s) } else { surfaces.remove(s) }
         let foreground = !surfaces.isEmpty
-        Task { await engine.setForeground(foreground) }
+        Task { await realEngine.setForeground(foreground) }
         if visible { Task { await reload() } }
     }
 
     public var isForeground: Bool { !surfaces.isEmpty }
 
     private func loadSettings() async {
-        if let v = try? await store.setting(SettingKey.menuMetric), let m = MenuMetric(rawValue: v) { menuMetric = m }
+        if let v = try? await realStore.setting(SettingKey.menuMetric), let m = MenuMetric(rawValue: v) { menuMetric = m }
         if let v = try? await store.setting(SettingKey.scope) { scope = Scope(raw: v) }
-        if let v = try? await store.setting(SettingKey.backgroundPoll), let s = Int(v) {
+        if let v = try? await realStore.setting(SettingKey.backgroundPoll), let s = Int(v) {
             backgroundMinutes = [15, 30, 60].min { abs($0 - s / 60) < abs($1 - s / 60) } ?? 15
         }
-        if let v = try? await store.setting(SettingKey.dismissedSuggestions) {
-            dismissedSuggestions = Set(v.split(separator: "\n").map(String.init))
-        }
-        alertsEnabled = (try? await store.setting(SettingKey.alertsEnabled)) == "1"
+        let dismissed = (try? await store.setting(SettingKey.dismissedSuggestions)) ?? nil
+        dismissedSuggestions = Set((dismissed ?? "").split(separator: "\n").map(String.init))
+        alertsEnabled = (try? await realStore.setting(SettingKey.alertsEnabled)) == "1"
     }
 
     // MARK: Refresh
@@ -185,6 +203,7 @@ public final class AppModel {
             return
         }
         now = clock()
+        hasRealOrgs = isPreviewing ? await realOrgsExist() : !snapshot.orgs.isEmpty
         if scope != .all, case .org(let id) = scope, snapshot.org(id) == nil { scope = .all }
         await recordLastKnown()
         rebuildPopover()
@@ -222,7 +241,7 @@ public final class AppModel {
     public func setMenuMetric(_ m: MenuMetric) {
         menuMetric = m
         rebuildPopover()
-        Task { try? await store.setSetting(SettingKey.menuMetric, m.rawValue) }
+        Task { try? await realStore.setSetting(SettingKey.menuMetric, m.rawValue) }
     }
 
     public func setScope(_ s: Scope) async {
@@ -233,8 +252,8 @@ public final class AppModel {
 
     public func setBackgroundMinutes(_ m: Int) async {
         backgroundMinutes = m
-        try? await store.setSetting(SettingKey.backgroundPoll, String(m * 60))
-        await engine.setBackgroundLegacyInterval(TimeInterval(m * 60))
+        try? await realStore.setSetting(SettingKey.backgroundPoll, String(m * 60))
+        await realEngine.setBackgroundLegacyInterval(TimeInterval(m * 60))
     }
 
     public func setLaunchAtLogin(_ on: Bool) {
@@ -279,7 +298,7 @@ public final class AppModel {
                 message = "Could not save the budget: \(error)"
                 return nil
             }
-            if first && !alertsEnabled {
+            if first && !alertsEnabled && !isPreviewing {
                 let granted = await notifier.requestAuthorization()
                 alertsEnabled = granted
                 try? await store.setSetting(SettingKey.alertsEnabled, granted ? "1" : "0")
@@ -300,7 +319,7 @@ public final class AppModel {
     }
 
     private func evaluateAlerts() async {
-        guard alertsEnabled else { return }
+        guard alertsEnabled, !isPreviewing else { return }
         for event in AlertPlanner.candidates(snapshot: snapshot, now: now) {
             let key = AlertPlanner.settingKey(for: event)
             if (try? await store.setting(key)) != nil { continue }
@@ -314,6 +333,7 @@ public final class AppModel {
     /// Writes the key to the secret store (never the database), saves the org, runs a first refresh.
     public func addOrganization(_ draft: ConnectionDraft) async -> ConnectionResult? {
         guard draft.isValid else { return nil }
+        if isPreviewing { await exitPreview() }
         let org = Org(id: UUID().uuidString, provider: draft.provider, displayName: draft.trimmedName)
         do {
             try secrets.write(draft.trimmedKey, for: org.keychainRef)
@@ -368,6 +388,69 @@ public final class AppModel {
         return ConnectionResult(orgId: org.id, state: state, message: "Connected. Loaded \(Fmt.count(lines)) rows.", succeeded: true)
     }
 
+    // MARK: Sample-data preview
+
+    /// The banner text while previewing, nil otherwise. Both the popover and the window show it.
+    public var previewBanner: PreviewBanner? { isPreviewing ? PreviewBanner() : nil }
+
+    /// Whether the preview can be turned on: only before any real organization is connected.
+    public var canPreview: Bool { !isDemo && (isPreviewing || !hasRealOrgs) }
+
+    /// "Add organization" from any empty state: open Connections with the add form showing.
+    public func beginAddOrganization() {
+        selection = .connections
+        addOrganizationRequested = true
+    }
+
+    public func setPreview(_ on: Bool) async {
+        if on { await enterPreview() } else { await exitPreview() }
+    }
+
+    /// Switches every screen to an in-memory sample company and remembers the choice. Does nothing when a
+    /// real organization exists, so sample and real data never mix.
+    public func enterPreview() async {
+        guard !isDemo, !isPreviewing else { return }
+        guard !(await realOrgsExist()) else { return }
+        await activatePreview()
+        try? await realStore.setSetting(SettingKey.previewSampleData, "1")
+        await reload()
+    }
+
+    /// Back to the real (empty or connected) data. The sample store is discarded.
+    public func exitPreview() async {
+        guard isPreviewing else { return }
+        let sampleEngine = engine
+        await sampleEngine.stop()
+        store = realStore
+        secrets = realSecrets
+        engine = realEngine
+        isPreviewing = false
+        try? await realStore.setSetting(SettingKey.previewSampleData, "0")
+        scope = .all
+        await loadSettings()
+        await reload()
+    }
+
+    private func realOrgsExist() async -> Bool { ((try? await realStore.orgs()) ?? []).isEmpty == false }
+
+    /// Builds a fresh in-memory sample set and makes it the active one. Never touches the real set.
+    private func activatePreview() async {
+        let t = clock()
+        guard let sampleStore = try? MeterStore.inMemory() else { return }
+        let sampleSecrets = InMemorySecrets()
+        let sampleEngine = SyncEngine(store: sampleStore, secrets: sampleSecrets, clientFactory: SampleData.factory(now: t), now: clock)
+        do { try await SampleData.seed(store: sampleStore, secrets: sampleSecrets, engine: sampleEngine, now: t) } catch {
+            message = "Could not build the sample data: \(error)"
+            return
+        }
+        store = sampleStore
+        secrets = sampleSecrets
+        engine = sampleEngine
+        isPreviewing = true
+        scope = .all
+        await loadSettings()
+    }
+
     // MARK: Export
 
     public func csv(from: UTCDay, to: UTCDay) -> String { Export.csv(snapshot, from: from, to: to) }
@@ -377,4 +460,11 @@ public final class AppModel {
     public func csvFileName(from: UTCDay, to: UTCDay) -> String { "meter-\(from.string)-to-\(to.string).csv" }
 
     public var weeklyFileName: String { "meter-weekly-\(UTCDay(now).string).md" }
+}
+
+/// The persistent notice shown in the popover and the window while sample data is on.
+public struct PreviewBanner: Equatable, Sendable {
+    public let text = "Sample data. Not your spend."
+    public let exitTitle = "Exit preview"
+    public init() {}
 }

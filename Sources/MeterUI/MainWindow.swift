@@ -38,14 +38,19 @@ public struct MainWindowRoot: View {
                     .disabled(model.isRefreshing)
                 }
             }
-            .safeAreaInset(edge: .top) {
-                if let m = model.message {
-                    HStack {
-                        Label(m, systemImage: "exclamationmark.triangle").font(.callout)
-                        Spacer()
-                        Button("Dismiss") { model.dismissMessage() }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    if let banner = model.previewBanner {
+                        PreviewBannerView(banner: banner) { Task { await model.exitPreview() } }
                     }
-                    .padding(10).background(.thinMaterial)
+                    if let m = model.message {
+                        HStack {
+                            Label(m, systemImage: "exclamationmark.triangle").font(.callout)
+                            Spacer()
+                            Button("Dismiss") { model.dismissMessage() }
+                        }
+                        .padding(10).background(.thinMaterial)
+                    }
                 }
             }
         }
@@ -70,15 +75,44 @@ struct ScopeMenu: View {
     }
 }
 
+/// The two ways out of an empty state: connect a real organization, or look at sample data first.
+struct EmptyStateActions: View {
+    let add: () -> Void
+    let preview: () -> Void
+    var body: some View {
+        HStack(spacing: 10) {
+            Button("Add organization", action: add).buttonStyle(.borderedProminent)
+            Button("Preview with sample data", action: preview)
+        }
+    }
+}
+
 /// Shown by every screen before the first organization exists.
 struct NoOrgsView: View {
-    let openConnections: () -> Void
+    let add: () -> Void
+    let preview: () -> Void
     var body: some View {
         VStack(spacing: 12) {
             EmptyState(symbol: "link", title: "No organizations yet",
-                       detail: "Add an Anthropic or OpenAI organization with an admin key to see spend.")
-            Button("Add an organization", action: openConnections).buttonStyle(.borderedProminent)
+                       detail: "Add an Anthropic or OpenAI organization with an admin key to see spend, or look around with sample data first.")
+            EmptyStateActions(add: add, preview: preview)
         }
+    }
+}
+
+/// The persistent notice while sample data is on. Plain values and closures only.
+struct PreviewBannerView: View {
+    let banner: PreviewBanner
+    let exit: () -> Void
+    var body: some View {
+        HStack {
+            Label(banner.text, systemImage: "eye").font(.callout.weight(.medium))
+            Spacer()
+            Button(banner.exitTitle, action: exit)
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.18))
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -15,7 +15,7 @@ struct MeterApp: App {
         MenuBarExtra {
             PopoverRoot().environment(model)
         } label: {
-            MenuBarLabelView(title: model.popover.title)
+            MenuBarLabelView(title: model.popover.title, isPreview: model.isPreviewing)
         }
         .menuBarExtraStyle(.window)
 

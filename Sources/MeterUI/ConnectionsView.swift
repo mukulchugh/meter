@@ -19,7 +19,10 @@ struct ConnectionsView: View {
                 Button("Add organization", systemImage: "plus") { adding = true }.buttonStyle(.borderedProminent)
             }
             if c.rows.isEmpty {
-                Card { Text("No organizations yet.").font(.callout).foregroundStyle(.secondary) }
+                Card {
+                    Text("No organizations yet.").font(.callout).foregroundStyle(.secondary)
+                    EmptyStateActions(add: { adding = true }, preview: { Task { await model.enterPreview() } })
+                }
             }
             ForEach(c.rows) { r in
                 ConnectionCard(row: r, rotate: { rotating = r }, remove: { removing = r })
@@ -34,6 +37,8 @@ struct ConnectionsView: View {
                 Label(ConnectionHelp.organizationNote, systemImage: "info.circle").font(.callout)
             }
         }
+        .onAppear(perform: consumeAddRequest)
+        .onChange(of: model.addOrganizationRequested) { consumeAddRequest() }
         .sheet(isPresented: $adding) {
             AddOrganizationForm(
                 save: { draft in await model.addOrganization(draft) },
@@ -51,6 +56,15 @@ struct ConnectionsView: View {
         } message: { _ in
             Text("This deletes its stored key and its local history. Provider data is not touched.")
         }
+    }
+}
+
+extension ConnectionsView {
+    /// An empty state elsewhere asked for the add form.
+    func consumeAddRequest() {
+        guard model.addOrganizationRequested else { return }
+        model.addOrganizationRequested = false
+        adding = true
     }
 }
 

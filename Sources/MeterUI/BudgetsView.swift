@@ -26,6 +26,7 @@ struct BudgetsView: View {
             }
             if model.snapshot.orgs.isEmpty {
                 Text("Add an organization first so budgets have spend to track.").font(.callout).foregroundStyle(.secondary)
+                EmptyStateActions(add: { model.beginAddOrganization() }, preview: { Task { await model.enterPreview() } })
             }
             if c.budgets.isEmpty {
                 Card { Text("No budgets yet. Creating the first one asks to allow notifications.").font(.callout).foregroundStyle(.secondary) }

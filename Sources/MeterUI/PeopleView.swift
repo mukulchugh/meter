@@ -6,7 +6,7 @@ struct PeopleView: View {
 
     var body: some View {
         if model.snapshot.orgs.isEmpty {
-            NoOrgsView { model.selection = .connections }
+            NoOrgsView(add: { model.beginAddOrganization() }, preview: { Task { await model.enterPreview() } })
         } else {
             let c = PeopleContent(snapshot: model.snapshot, now: model.now, scope: model.scope)
             Screen {

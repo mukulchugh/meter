@@ -10,7 +10,8 @@ public struct SettingsRoot: View {
     public var body: some View {
         SettingsForm(
             metric: model.menuMetric, scope: model.scope, orgs: model.snapshot.orgs, minutes: model.backgroundMinutes,
-            launchAtLogin: model.launchAtLogin,
+            launchAtLogin: model.launchAtLogin, previewing: model.isPreviewing, canPreview: model.canPreview,
+            setPreview: { on in Task { await model.setPreview(on) } },
             setMetric: { model.setMenuMetric($0) },
             setScope: { s in Task { await model.setScope(s) } },
             setMinutes: { m in Task { await model.setBackgroundMinutes(m) } },
@@ -24,6 +25,9 @@ struct SettingsForm: View {
     let orgs: [Org]
     let minutes: Int
     let launchAtLogin: Bool
+    let previewing: Bool
+    let canPreview: Bool
+    let setPreview: @MainActor @Sendable (Bool) -> Void
     let setMetric: @MainActor @Sendable (MenuMetric) -> Void
     let setScope: @MainActor @Sendable (Scope) -> Void
     let setMinutes: @MainActor @Sendable (Int) -> Void
@@ -43,6 +47,10 @@ struct SettingsForm: View {
             }
             Text("While Meter is open it refreshes every minute.").font(.caption).foregroundStyle(.secondary)
             Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: setLaunch))
+            Toggle("Preview with sample data", isOn: Binding(get: { previewing }, set: setPreview)).disabled(!canPreview)
+            Text(canPreview ? "Shows a made-up company so you can look around. Nothing is saved to your real data and no keys are used."
+                 : "Sample data is only offered before an organization is connected.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
         .frame(width: 440)

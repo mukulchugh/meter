@@ -9,13 +9,18 @@ public enum MeterWindowID { public static let main = "main" }
 /// The menu bar label: one stable metric, an attention glyph when data is missing or unhealthy.
 public struct MenuBarLabelView: View {
     let title: MenuBarTitle
-    public init(title: MenuBarTitle) { self.title = title }
+    let isPreview: Bool
+    public init(title: MenuBarTitle, isPreview: Bool = false) {
+        self.title = title
+        self.isPreview = isPreview
+    }
     public var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: title.showsAttention ? "exclamationmark.triangle.fill" : "gauge.with.dots.needle.50percent")
-            if let text = title.text { Text(text).monospacedDigit() }
+            Image(systemName: isPreview ? "eye" : title.showsAttention ? "exclamationmark.triangle.fill" : "gauge.with.dots.needle.50percent")
+            // Sample numbers must never pass for real spend in the menu bar.
+            if isPreview { Text("Sample") } else if let text = title.text { Text(text).monospacedDigit() }
         }
-        .accessibilityLabel(title.accessibilityLabel)
+        .accessibilityLabel(isPreview ? "Meter, sample data" : title.accessibilityLabel)
     }
 }
 
@@ -30,6 +35,10 @@ public struct PopoverRoot: View {
     public var body: some View {
         PopoverView(
             content: model.popover, isRefreshing: model.isRefreshing, startupNote: model.startupNote,
+            banner: model.previewBanner,
+            addOrganization: { model.beginAddOrganization(); openWindow(id: MeterWindowID.main); activateApp() },
+            startPreview: { Task { await model.enterPreview() } },
+            exitPreview: { Task { await model.exitPreview() } },
             openMeter: { openWindow(id: MeterWindowID.main); activateApp() },
             refresh: { Task { await model.refreshAll() } },
             openSettings: { openSettings(); activateApp() })
@@ -43,12 +52,44 @@ struct PopoverView: View {
     let content: PopoverContent
     let isRefreshing: Bool
     let startupNote: String?
+    let banner: PreviewBanner?
+    let addOrganization: () -> Void
+    let startPreview: () -> Void
+    let exitPreview: () -> Void
     let openMeter: () -> Void
     let refresh: () -> Void
     let openSettings: () -> Void
 
     var body: some View {
+        if !content.hasOrgs && banner == nil {
+            emptyState
+        } else {
+            populated
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let startupNote { Text(startupNote).font(.caption).foregroundStyle(.orange) }
+            EmptyState(symbol: "link", title: "No organizations yet",
+                       detail: "Add an Anthropic or OpenAI organization to see spend, or look around with sample data.")
+            VStack(spacing: 8) {
+                Button(action: addOrganization) { Text("Add organization").frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent)
+                Button(action: startPreview) { Text("Preview with sample data").frame(maxWidth: .infinity) }
+            }
+            Divider()
+            HStack {
+                Spacer()
+                Button("Settings", action: openSettings)
+            }
+        }
+        .padding(16)
+        .frame(width: 340)
+    }
+
+    private var populated: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if let banner { PreviewBannerView(banner: banner, exit: exitPreview).clipShape(RoundedRectangle(cornerRadius: 8)) }
             // 1. Scope and reporting time
             VStack(alignment: .leading, spacing: 2) {
                 Text(content.scopeLabel).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
