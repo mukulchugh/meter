@@ -59,7 +59,20 @@ PLIST
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 
 # Inside-out: the executable first, then the bundle.
-codesign --force --sign - "$APP/Contents/MacOS/MeterApp"
-codesign --force --sign - "$APP"
+# Sign with the stable self-signed identity when it's in the keychain, so every build has the
+# same designated requirement (identifier + certificate) and the Keychain doesn't re-prompt
+# after updates. Without it (another Mac, CI-less checkouts), fall back to ad-hoc.
+SIGN_NAME="${METER_SIGN_IDENTITY:-Mukul Chugh Local Code Signing}"
+SIGN_ID="$(security find-certificate -c "$SIGN_NAME" -Z 2>/dev/null | awk '/SHA-1 hash:/ {print $3; exit}')"
+if [ -n "$SIGN_ID" ]; then
+  REQ="designated => identifier \"dev.meter.app\" and certificate leaf = H\"$SIGN_ID\""
+  codesign --force --sign "$SIGN_ID" --timestamp=none --identifier dev.meter.app -r="$REQ" "$APP/Contents/MacOS/MeterApp"
+  codesign --force --sign "$SIGN_ID" --timestamp=none -r="$REQ" "$APP"
+  echo "signed with \"$SIGN_NAME\" ($SIGN_ID)"
+else
+  codesign --force --sign - "$APP/Contents/MacOS/MeterApp"
+  codesign --force --sign - "$APP"
+  echo "signed ad-hoc (no \"$SIGN_NAME\" identity found); the Keychain may re-prompt after updates"
+fi
 codesign -v --strict "$APP"
 echo "built $APP ($VERSION)"
