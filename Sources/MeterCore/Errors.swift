@@ -29,7 +29,12 @@ public enum ProviderError: Error, Equatable, Sendable {
             let prefix = provider == .anthropic ? "sk-ant-admin01-" : "sk-admin-"
             switch problem {
             case .notAdminKey:
-                return "This key isn't an admin key. Meter needs a \(provider.displayName) admin key (it starts with \(prefix))."
+                switch provider {
+                case .anthropic:
+                    return "This key can't read spend. A personal API key works only if its owner has the admin role in the Console organization and the key isn't limited to one workspace. Otherwise use an Admin key (it starts with \(prefix))."
+                case .openai:
+                    return "This key can't read organization costs. OpenAI needs an Admin key (it starts with \(prefix); an Org Owner creates it under Settings, Organization, Admin keys), or a key with the Usage: Read permission."
+                }
             case .invalidKey:
                 return "\(provider.displayName) rejected the key. It may have expired or been revoked."
             case .adminAPIUnavailable:

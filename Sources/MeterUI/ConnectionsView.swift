@@ -108,11 +108,11 @@ struct AddOrganizationForm: View {
                     ForEach(Provider.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 TextField("Display name", text: $draft.displayName, prompt: Text(draft.provider.displayName))
-                SecureField("Admin key", text: $draft.adminKey)
+                SecureField("API key", text: $draft.adminKey, prompt: Text("Admin key or user API key"))
                 if let problem = draft.errors.first, !draft.adminKey.isEmpty {
                     Label(problem, systemImage: "xmark.octagon.fill").font(.callout).foregroundStyle(.red)
                 } else if let note = draft.warning {
-                    Label(note, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(.orange)
+                    Label(note, systemImage: "info.circle.fill").font(.callout).foregroundStyle(.secondary)
                 }
                 Text(ConnectionHelp.steps(for: draft.provider)).font(.caption).foregroundStyle(.secondary)
                 Text(ConnectionHelp.organizationNote).font(.caption).foregroundStyle(.secondary)

@@ -122,7 +122,7 @@ private let openAIKey = "sk-admin-test"
         // A key without the admin prefix: say so.
         let notAdmin = await fetch(status: 401, key: "sk-ant-api03-xyz")
         #expect(notAdmin == .auth(.notAdminKey, .anthropic))
-        #expect(notAdmin?.message.contains("isn't an admin key") == true)
+        #expect(notAdmin?.message.contains("can't read spend") == true)
         // An admin-looking key that is refused: expired or revoked.
         #expect(await fetch(status: 401, key: adminKey) == .auth(.invalidKey, .anthropic))
         // 403 with an admin key: the Admin API is not available (individual accounts).

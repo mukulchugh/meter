@@ -294,7 +294,7 @@ private func routed(_ r: HTTPRequest) throws -> HTTPResponse {
         _ = await rig.engine.refresh(org: rig.anthropic)
         let s = try await rig.snapshot()
         let cov = try #require(s.coverage.first { $0.source == .anthropicAnalytics })
-        #expect(cov.lastError?.contains("isn't an admin key") == true)
+        #expect(cov.lastError?.contains("can't read") == true)
         #expect(cov.hasLastKnownValue && cov.state(now: rig.clock.now) == .error)
         // Old lines stay; the total keeps its last known value.
         #expect(s.monthToDate(now: rig.clock.now).amount == 150)

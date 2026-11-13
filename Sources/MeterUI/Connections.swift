@@ -44,14 +44,14 @@ public struct ConnectionsContent: Equatable, Sendable {
 }
 
 public enum ConnectionHelp {
-    public static let organizationNote = "The Admin API requires an organization account. Individual accounts cannot create admin keys."
+    public static let organizationNote = "Spend data needs an organization account: individual accounts can't read it with any key."
 
     public static func steps(for provider: Provider) -> String {
         switch provider {
         case .anthropic:
-            "Open the Claude Console at platform.claude.com/settings/admin-keys, choose Create admin key, name it, pick an expiry, then Add. The key starts with sk-ant-admin01- and is shown once. You need the admin role in a Console organization."
+            "Best: an Admin key from platform.claude.com/settings/admin-keys (Create admin key, name it, pick an expiry, Add; it starts with sk-ant-admin and is shown once). Or your own API key, if you're an admin in the Console organization and the key isn't limited to one workspace."
         case .openai:
-            "Open platform.openai.com/settings/organization/admin-keys and create an admin key. It starts with sk-admin-. Organization owners can create admin keys."
+            "Best: an Admin key from platform.openai.com/settings/organization/admin-keys (it starts with sk-admin-; Organization Owners create them). A regular key works only if it has the Usage: Read permission."
         }
     }
 
@@ -59,23 +59,26 @@ public enum ConnectionHelp {
         provider == .anthropic ? "sk-ant-admin" : "sk-admin-"
     }
 
-    /// A key that is certainly not an admin key for this provider, with what to do instead.
+    /// A key that is certainly for the other provider. Admin keys and personal (user) keys are both
+    /// accepted; the provider's answer decides whether the key can read spend.
     public static func wrongKind(_ key: String, for provider: Provider) -> String? {
         switch provider {
         case .anthropic:
-            if key.hasPrefix("sk-ant-api") || key.hasPrefix("sk-ant-oat") {
-                return "This is a regular Anthropic API key. Meter needs an Admin key: create one at platform.claude.com/settings/admin-keys (it starts with sk-ant-admin)."
-            }
             if !key.hasPrefix("sk-ant-") && key.hasPrefix("sk-") {
-                return "This looks like an OpenAI key. Switch Provider to OpenAI, or paste an Anthropic Admin key."
+                return "This looks like an OpenAI key. Switch Provider to OpenAI."
             }
         case .openai:
             if key.hasPrefix("sk-ant-") { return "This is an Anthropic key. Switch Provider to Anthropic." }
-            if key.hasPrefix("sk-proj-") || key.hasPrefix("sk-svcacct-") || (key.hasPrefix("sk-") && !key.hasPrefix("sk-admin-") && key.count > 40 && !key.contains("admin")) {
-                return "This is a regular OpenAI API key. Meter needs an Admin key: an Org Owner creates one under Settings, Organization, Admin keys (it starts with sk-admin-)."
-            }
         }
         return nil
+    }
+
+    /// Whether a key is a regular (user, project or service) key rather than an admin key.
+    public static func isUserKey(_ key: String, for provider: Provider) -> Bool {
+        switch provider {
+        case .anthropic: return key.hasPrefix("sk-ant-") && !key.hasPrefix("sk-ant-admin")
+        case .openai: return key.hasPrefix("sk-") && !key.hasPrefix("sk-admin-")
+        }
     }
 }
 
@@ -102,11 +105,19 @@ public struct ConnectionDraft: Equatable, Sendable {
         return []
     }
 
-    /// A gentle note when the key doesn't look like the usual admin key. Saving is still allowed.
+    /// A note about what a non-admin key can do. Saving is still allowed; the provider decides.
     public var warning: String? {
         let key = trimmedKey
         guard !key.isEmpty, errors.isEmpty, !key.hasPrefix(ConnectionHelp.keyPrefix(for: provider)) else { return nil }
-        return "\(provider.displayName) admin keys usually start with \(ConnectionHelp.keyPrefix(for: provider)). Meter will check it with \(provider.displayName)."
+        if ConnectionHelp.isUserKey(key, for: provider) {
+            switch provider {
+            case .anthropic:
+                return "A user API key works if your account is an admin in the Console organization and the key isn't limited to one workspace. Meter will check."
+            case .openai:
+                return "OpenAI usually needs an Admin key for organization costs. A key with the Usage: Read permission may work. Meter will check."
+            }
+        }
+        return "\(provider.displayName) keys usually start with \(provider == .anthropic ? "sk-ant-" : "sk-"). Meter will check it with \(provider.displayName)."
     }
     public var isValid: Bool { errors.isEmpty }
 }

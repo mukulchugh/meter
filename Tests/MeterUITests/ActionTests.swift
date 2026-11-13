@@ -236,8 +236,11 @@ import Testing
         #expect(!draft("").isValid)
         // Only keys that are certainly the wrong kind block saving, each with a reason.
         #expect(!draft("sk-admin-wrong-provider").isValid)
-        #expect(draft("sk-ant-api03-regular").errors.first?.contains("regular Anthropic API key") == true)
-        #expect(!draft("sk-proj-abc", provider: .openai).isValid)
+        // User keys are accepted, with a note on what they need; the provider decides.
+        #expect(draft("sk-ant-api03-regular").isValid)
+        #expect(draft("sk-ant-api03-regular").warning?.contains("admin in the Console organization") == true)
+        #expect(draft("sk-proj-abc", provider: .openai).isValid)
+        #expect(draft("sk-proj-abc", provider: .openai).warning?.contains("Usage: Read") == true)
         #expect(!draft("sk-ant-admin01-x", provider: .openai).isValid)
         #expect(draft("sk-admin-ok", provider: .openai).isValid)
         // A new admin prefix is not locked out, and needs no warning.
@@ -293,9 +296,9 @@ import Testing
 
     @Test func invalidDraftsAreNotSaved() async throws {
         let rig = try await makeRig(demo: false)
-        let refused = await rig.model.addOrganization(draft("sk-ant-api03-regular-key"))
+        let refused = await rig.model.addOrganization(draft("sk-admin-openai-key-on-anthropic"))
         #expect(refused?.succeeded == false)
-        #expect(refused?.message.contains("Admin key") == true)
+        #expect(refused?.message.contains("OpenAI key") == true)
         #expect(try await rig.store.orgs().isEmpty)
     }
 
@@ -303,7 +306,7 @@ import Testing
         let rig = try await makeRig(demo: false)
         let added = try #require(await rig.model.addOrganization(draft()))
         let org = try #require(rig.model.snapshot.org(added.orgId))
-        let bad = await rig.model.rotateKey(orgId: org.id, newKey: "sk-ant-api03-wrong-kind")
+        let bad = await rig.model.rotateKey(orgId: org.id, newKey: "sk-admin-other-provider")
         #expect(bad?.succeeded == false)
         #expect(try rig.secrets.read(org.keychainRef) == Self.marker)
         let ok = await rig.model.rotateKey(orgId: org.id, newKey: "sk-ant-admin01-NEW")

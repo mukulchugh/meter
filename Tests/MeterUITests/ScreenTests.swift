@@ -149,6 +149,6 @@ import Testing
         }
         #expect(ConnectionHelp.steps(for: .anthropic).contains("platform.claude.com/settings/admin-keys"))
         #expect(ConnectionHelp.steps(for: .openai).contains("platform.openai.com/settings/organization/admin-keys"))
-        #expect(ConnectionHelp.organizationNote.contains("requires an organization account"))
+        #expect(ConnectionHelp.organizationNote.contains("organization account"))
     }
 }
