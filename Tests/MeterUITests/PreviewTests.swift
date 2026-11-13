@@ -107,7 +107,9 @@ private func realIsEmpty(_ store: MeterStore) async throws -> Bool {
     @Test func invalidDraftDoesNotExitPreview() async throws {
         let rig = try await makeRig(demo: false)
         await rig.model.enterPreview()
-        #expect(await rig.model.addOrganization(ConnectionDraft()) == nil)
+        let refused = await rig.model.addOrganization(ConnectionDraft())
+        #expect(refused?.succeeded == false)
+        #expect(refused?.message.isEmpty == false)
         #expect(rig.model.isPreviewing)
     }
 

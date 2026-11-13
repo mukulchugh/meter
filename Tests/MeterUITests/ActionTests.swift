@@ -230,10 +230,22 @@ import Testing
 
     @Test func draftValidation() {
         #expect(draft().isValid)
-        #expect(!draft(name: " ").isValid)
+        // The name is optional: it defaults to the provider's name.
+        #expect(draft(name: " ").isValid)
+        #expect(draft(name: " ").effectiveName == "Anthropic")
         #expect(!draft("").isValid)
+        // Only keys that are certainly the wrong kind block saving, each with a reason.
         #expect(!draft("sk-admin-wrong-provider").isValid)
+        #expect(draft("sk-ant-api03-regular").errors.first?.contains("regular Anthropic API key") == true)
+        #expect(!draft("sk-proj-abc", provider: .openai).isValid)
+        #expect(!draft("sk-ant-admin01-x", provider: .openai).isValid)
         #expect(draft("sk-admin-ok", provider: .openai).isValid)
+        // A new admin prefix is not locked out, and needs no warning.
+        #expect(draft("sk-ant-admin02-newer").isValid)
+        #expect(draft("sk-ant-admin02-newer").warning == nil)
+        // Anything else unusual is allowed with a gentle warning; the provider decides.
+        #expect(draft("something-unusual").isValid)
+        #expect(draft("something-unusual").warning != nil)
         #expect(draft("  \(Self.marker)  ").trimmedKey == Self.marker)
     }
 
@@ -281,7 +293,9 @@ import Testing
 
     @Test func invalidDraftsAreNotSaved() async throws {
         let rig = try await makeRig(demo: false)
-        #expect(await rig.model.addOrganization(draft("nope")) == nil)
+        let refused = await rig.model.addOrganization(draft("sk-ant-api03-regular-key"))
+        #expect(refused?.succeeded == false)
+        #expect(refused?.message.contains("Admin key") == true)
         #expect(try await rig.store.orgs().isEmpty)
     }
 
@@ -289,7 +303,7 @@ import Testing
         let rig = try await makeRig(demo: false)
         let added = try #require(await rig.model.addOrganization(draft()))
         let org = try #require(rig.model.snapshot.org(added.orgId))
-        let bad = await rig.model.rotateKey(orgId: org.id, newKey: "wrong")
+        let bad = await rig.model.rotateKey(orgId: org.id, newKey: "sk-ant-api03-wrong-kind")
         #expect(bad?.succeeded == false)
         #expect(try rig.secrets.read(org.keychainRef) == Self.marker)
         let ok = await rig.model.rotateKey(orgId: org.id, newKey: "sk-ant-admin01-NEW")

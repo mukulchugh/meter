@@ -107,8 +107,13 @@ struct AddOrganizationForm: View {
                 Picker("Provider", selection: $draft.provider) {
                     ForEach(Provider.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
-                TextField("Display name", text: $draft.displayName)
+                TextField("Display name", text: $draft.displayName, prompt: Text(draft.provider.displayName))
                 SecureField("Admin key", text: $draft.adminKey)
+                if let problem = draft.errors.first, !draft.adminKey.isEmpty {
+                    Label(problem, systemImage: "xmark.octagon.fill").font(.callout).foregroundStyle(.red)
+                } else if let note = draft.warning {
+                    Label(note, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(.orange)
+                }
                 Text(ConnectionHelp.steps(for: draft.provider)).font(.caption).foregroundStyle(.secondary)
                 Text(ConnectionHelp.organizationNote).font(.caption).foregroundStyle(.secondary)
             }
@@ -120,21 +125,22 @@ struct AddOrganizationForm: View {
             HStack {
                 Spacer()
                 Button(result?.succeeded == true ? "Done" : "Cancel", action: close).keyboardShortcut(.cancelAction)
+                if saving {
+                    ProgressView().controlSize(.small)
+                    Text("Checking with \(draft.provider.displayName)…").font(.callout).foregroundStyle(.secondary)
+                }
                 if result?.succeeded != true {
                     Button("Save and refresh") {
                         saving = true
                         Task {
-                            result = await save(draft)
-                            draft.adminKey = ""
+                            result = await save(draft) ?? ConnectionResult(orgId: "", state: .error, message: "Nothing was saved. Try again.", succeeded: false)
+                            if result?.succeeded == true { draft.adminKey = "" }
                             saving = false
                         }
                     }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-                    .disabled(!draft.isValid || saving)
+                    .disabled(draft.trimmedKey.isEmpty || saving)
                 }
-            }
-            if !draft.isValid && (!draft.displayName.isEmpty || !draft.adminKey.isEmpty) {
-                Text(draft.errors.joined(separator: " ")).font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import MeterCore
 import Observation
 
@@ -332,27 +333,36 @@ public final class AppModel {
 
     /// Writes the key to the secret store (never the database), saves the org, runs a first refresh.
     public func addOrganization(_ draft: ConnectionDraft) async -> ConnectionResult? {
-        guard draft.isValid else { return nil }
+        // Never fail silently: an invalid draft still gets a visible reason.
+        guard draft.isValid else {
+            connectionLog.notice("add organization refused: invalid draft (\(draft.provider.rawValue, privacy: .public))")
+            return ConnectionResult(orgId: "", state: .error, message: draft.errors.joined(separator: " "), succeeded: false)
+        }
         if isPreviewing { await exitPreview() }
-        let org = Org(id: UUID().uuidString, provider: draft.provider, displayName: draft.trimmedName)
+        let org = Org(id: UUID().uuidString, provider: draft.provider, displayName: draft.effectiveName)
+        connectionLog.notice("add organization: saving key for \(draft.provider.rawValue, privacy: .public)")
         do {
             try secrets.write(draft.trimmedKey, for: org.keychainRef)
+            connectionLog.notice("add organization: key stored in the Keychain")
             try await store.upsertOrg(org)
+            connectionLog.notice("add organization: organization saved, first refresh starting")
         } catch {
+            connectionLog.error("add organization failed: \(String(describing: error), privacy: .public)")
             try? secrets.delete(org.keychainRef)
             return ConnectionResult(orgId: org.id, state: .error, message: "Could not save the key: \(error)", succeeded: false)
         }
-        return await firstRefresh(org)
+        let result = await firstRefresh(org)
+        connectionLog.notice("add organization: first refresh finished, succeeded=\(result.succeeded, privacy: .public)")
+        return result
     }
 
     /// Replaces the stored key for an org and refreshes it.
     public func rotateKey(orgId: String, newKey: String) async -> ConnectionResult? {
         guard let org = snapshot.org(orgId) else { return nil }
         let key = newKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard key.hasPrefix(ConnectionHelp.keyPrefix(for: org.provider)) else {
-            return ConnectionResult(orgId: orgId, state: .error,
-                                    message: "\(org.provider.displayName) admin keys start with \(ConnectionHelp.keyPrefix(for: org.provider)).",
-                                    succeeded: false)
+        if key.isEmpty { return ConnectionResult(orgId: orgId, state: .error, message: "Paste an admin key.", succeeded: false) }
+        if let wrong = ConnectionHelp.wrongKind(key, for: org.provider) {
+            return ConnectionResult(orgId: orgId, state: .error, message: wrong, succeeded: false)
         }
         do { try secrets.write(key, for: org.keychainRef) } catch {
             return ConnectionResult(orgId: orgId, state: .error, message: "Could not save the key: \(error)", succeeded: false)
@@ -468,3 +478,6 @@ public struct PreviewBanner: Equatable, Sendable {
     public let exitTitle = "Exit preview"
     public init() {}
 }
+
+/// Connection steps in the macOS log (subsystem dev.meter.app). Never logs a key.
+let connectionLog = Logger(subsystem: "dev.meter.app", category: "connections")
