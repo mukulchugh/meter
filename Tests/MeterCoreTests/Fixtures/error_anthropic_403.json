@@ -1,0 +1,1 @@
+{"_source": "Synthetic error body in the Anthropic error envelope.", "type": "error", "error": {"type": "permission_error", "message": "Admin API is not available for this organization."}}

@@ -1,0 +1,9 @@
+{
+  "_source": "Synthetic multi-page fixture (page 1 of 2), envelope per docs/RESEARCH.md section 2.1.",
+  "data": [
+    {"starting_at": "2026-10-01T00:00:00Z", "ending_at": "2026-10-02T00:00:00Z", "group": {"model": "claude-opus-5"}, "cost": {"currency": "USD", "amount": "10000.000000", "list_amount": "10000.000000", "requests": null}}
+  ],
+  "has_more": true,
+  "next_page": "page_ABC",
+  "data_refreshed_at": "2026-10-03T06:00:00Z"
+}

@@ -1,0 +1,13 @@
+{
+  "_source": "Official example, openai/openai-openapi openapi.yaml L12206 ff. (docs/RESEARCH.md section 2.2). Rows 2 and 3 are constructed.",
+  "object": "page",
+  "data": [
+    {"object": "bucket", "start_time": 1730419200, "end_time": 1730505600, "results": [
+      {"object": "organization.costs.result", "amount": {"value": 0.06, "currency": "usd"}, "line_item": null, "project_id": null, "api_key_id": null, "quantity": null, "quantity_unit": null},
+      {"object": "organization.costs.result", "amount": {"value": 1.234567, "currency": "usd"}, "line_item": "gpt-6-astra, input_tokens", "project_id": "proj_prod", "api_key_id": "key_1", "quantity": 1000, "quantity_unit": "tokens"},
+      {"object": "organization.costs.result", "amount": {"value": 0.1, "currency": "usd"}, "line_item": "Code interpreter sessions", "project_id": "proj_prod", "api_key_id": "key_1", "quantity": 3, "quantity_unit": "sessions"}
+    ]}
+  ],
+  "has_more": false,
+  "next_page": null
+}

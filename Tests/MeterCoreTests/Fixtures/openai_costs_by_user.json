@@ -1,0 +1,4 @@
+{"_source": "CONSTRUCTED: costs grouped by user_id only.",
+ "object": "page",
+ "data": [{"object": "bucket", "start_time": 1730419200, "end_time": 1730505600, "results": [{"amount": {"value": 1.0, "currency": "usd"}, "user_id": "user-alice"}]}],
+ "has_more": false, "next_page": null}

@@ -1,0 +1,4 @@
+{"_source": "Synthetic multi-page fixture (page 2 of 2).",
+ "object": "page",
+ "data": [{"object": "bucket", "start_time": 1730505600, "end_time": 1730592000, "results": [{"amount": {"value": 2.25, "currency": "usd"}, "line_item": "gpt-6-astra, output_tokens", "project_id": "proj_prod", "api_key_id": "key_1"}]}],
+ "has_more": false, "next_page": null}

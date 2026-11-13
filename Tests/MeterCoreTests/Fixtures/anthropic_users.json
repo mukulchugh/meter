@@ -1,0 +1,3 @@
+{"_source": "CONSTRUCTED from field list in docs/RESEARCH.md section 5 (email, role).",
+ "data": [{"id": "user_01ALICE", "email": "Alice@Example.com", "name": "Alice Doe", "role": "developer"}],
+ "has_more": false, "first_id": "user_01ALICE", "last_id": "user_01ALICE"}

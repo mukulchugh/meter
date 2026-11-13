@@ -1,0 +1,19 @@
+{
+  "_source": "CONSTRUCTED from the field list in docs/RESEARCH.md section 6 (no official JSON example was captured). The nesting (core_metrics, model_breakdown) is an ASSUMPTION to check against a real key.",
+  "data": [
+    {"date": "2026-11-10T00:00:00Z", "actor": {"type": "user_actor", "email_address": "Alice@Example.com"}, "customer_type": "api", "terminal_type": "iTerm.app",
+     "core_metrics": {"num_sessions": 5, "lines_of_code": {"added": 120, "removed": 30}, "commits_by_claude_code": 2, "pull_requests_by_claude_code": 1},
+     "model_breakdown": [
+       {"model": "claude-opus-5", "tokens": {"input": 1000, "output": 500, "cache_read": 0, "cache_creation": 0}, "estimated_cost": {"currency": "USD", "amount": "250"}},
+       {"model": "claude-sonnet-5", "tokens": {"input": 10, "output": 5, "cache_read": 0, "cache_creation": 0}, "estimated_cost": {"currency": "USD", "amount": "50.5"}}
+     ]},
+    {"date": "2026-11-10T00:00:00Z", "actor": {"type": "user_actor", "email_address": "alice@example.com"}, "customer_type": "api", "terminal_type": "vscode",
+     "core_metrics": {"num_sessions": 1, "lines_of_code": {"added": 10, "removed": 0}, "commits_by_claude_code": 0, "pull_requests_by_claude_code": 0},
+     "model_breakdown": [{"model": "claude-sonnet-5", "estimated_cost": {"currency": "USD", "amount": "100"}}]},
+    {"date": "2026-11-10T00:00:00Z", "actor": {"type": "api_actor", "api_key_name": "ci-bot"}, "customer_type": "api", "terminal_type": "non-interactive",
+     "core_metrics": {"num_sessions": 3, "lines_of_code": {"added": 5, "removed": 5}, "commits_by_claude_code": 1, "pull_requests_by_claude_code": 0},
+     "model_breakdown": [{"model": "claude-sonnet-5", "estimated_cost": {"currency": "USD", "amount": "10"}}]}
+  ],
+  "has_more": false,
+  "next_page": null
+}

@@ -1,0 +1,2 @@
+{"_source": "CONSTRUCTED. RESEARCH.md section 7 gives only threshold_amount (cents), interval and notification_channel; the list envelope is an ASSUMPTION.",
+ "object": "list", "data": [{"id": "alert_1", "threshold_amount": 300000, "interval": "month", "notification_channel": {"type": "email", "recipients": ["cto@example.com"]}}]}

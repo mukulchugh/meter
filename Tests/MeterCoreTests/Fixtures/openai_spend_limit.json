@@ -1,0 +1,2 @@
+{"_source": "Shape per docs/RESEARCH.md section 7 (spec L30090): threshold_amount integer cents.",
+ "object": "organization.spend_limit", "threshold_amount": 500000, "currency": "USD", "interval": "month", "enforcement": {"status": "enforcing"}}

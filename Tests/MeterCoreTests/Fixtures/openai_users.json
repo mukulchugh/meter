@@ -1,0 +1,2 @@
+{"_source": "CONSTRUCTED from docs/RESEARCH.md section 5.",
+ "object": "list", "data": [{"id": "user-alice", "name": "Alice Doe", "email": "ALICE@example.com", "role": "owner"}], "has_more": false, "last_id": "user-alice"}

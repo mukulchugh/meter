@@ -1,0 +1,3 @@
+{"_source": "CONSTRUCTED from field list in docs/RESEARCH.md section 5 (id, name, status, workspace_id).",
+ "data": [{"id": "apikey_01AAA", "name": "prod-backend", "status": "active", "workspace_id": "wrkspc_01PROD", "created_by": {"id": "user_01ALICE", "type": "user"}}],
+ "has_more": false, "first_id": "apikey_01AAA", "last_id": "apikey_01AAA"}

@@ -1,0 +1,10 @@
+{
+  "_source": "Synthetic second page for the legacy cost_report (null workspace_id is the default workspace, RESEARCH.md section 5).",
+  "data": [
+    {"starting_at": "2025-08-03T00:00:00Z", "ending_at": "2025-08-04T00:00:00Z", "results": [
+      {"amount": "50", "currency": "USD", "cost_type": "web_search", "description": "Web search", "model": null, "service_tier": null, "workspace_id": null}
+    ]}
+  ],
+  "has_more": false,
+  "next_page": null
+}

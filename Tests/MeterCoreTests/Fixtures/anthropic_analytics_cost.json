@@ -1,0 +1,26 @@
+{
+  "_source": "Row 0 is the official example in https://platform.claude.com/docs/en/manage-claude/usage-cost-analytics-api (quoted in docs/RESEARCH.md section 2.1). Rows 1 and 2 are constructed from the field list in RESEARCH.md; the group.actor shape is an ASSUMPTION.",
+  "data": [
+    {
+      "starting_at": "2026-09-01T00:00:00Z",
+      "ending_at": "2026-10-01T00:00:00Z",
+      "group": {"model": "claude-opus-5", "cost_type": "tokens", "token_type": "cache_read_input_tokens", "api_key_id": null, "workspace_id": null, "actor": null, "service_tier": null},
+      "cost": {"currency": "USD", "amount": "41280.000000", "list_amount": "51600.000000", "requests": null}
+    },
+    {
+      "starting_at": "2026-09-02T00:00:00Z",
+      "ending_at": "2026-09-03T00:00:00Z",
+      "group": {"model": "claude-sonnet-5", "api_key_id": "apikey_01AAA", "workspace_id": "wrkspc_01PROD", "actor": "user_01ALICE", "service_tier": "standard"},
+      "cost": {"currency": "USD", "amount": "1234.567891", "list_amount": "1500.000000", "requests": 12}
+    },
+    {
+      "starting_at": "2026-09-02T00:00:00Z",
+      "ending_at": "2026-09-03T00:00:00Z",
+      "group": {"model": "claude-sonnet-5", "api_key_id": "apikey_01AAA", "workspace_id": "wrkspc_01PROD", "actor": "user_01ALICE", "service_tier": "standard"},
+      "cost": {"currency": "USD", "amount": "0.000001", "list_amount": "0.000001", "requests": 1}
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "data_refreshed_at": "2026-10-01T06:00:00Z"
+}

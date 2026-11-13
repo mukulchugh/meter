@@ -1,0 +1,2 @@
+{"_source": "CONSTRUCTED from docs/RESEARCH.md section 5 (limit 1 to 100, after, include_archived).",
+ "object": "list", "data": [{"id": "proj_prod", "name": "Production App", "status": "active"}, {"id": "proj_old", "name": "Old", "status": "archived"}], "first_id": "proj_prod", "last_id": "proj_old", "has_more": false}
