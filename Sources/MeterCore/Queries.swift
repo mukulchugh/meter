@@ -22,6 +22,12 @@ public struct Reading: Sendable, Equatable {
     public var missingOrgIds: [String]
 
     public static let basisLabel = "Provider-reported API cost"
+
+    public init(amount: Decimal?, state: ReadingState, missingOrgIds: [String] = []) {
+        self.amount = amount
+        self.state = state
+        self.missingOrgIds = missingOrgIds
+    }
 }
 
 public struct OrgTotal: Sendable, Equatable { public var org: Org; public var reading: Reading }

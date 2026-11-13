@@ -71,6 +71,12 @@ public actor SyncEngine {
     /// Foreground means a Meter window or popover is visible: the legacy feed polls every minute.
     public func setForeground(_ on: Bool) { foreground = on }
 
+    /// Background cadence of the fast Anthropic feed, clamped to 15 to 60 minutes. The UI cannot assign
+    /// `config` directly because it is actor-isolated.
+    public func setBackgroundLegacyInterval(_ seconds: TimeInterval) {
+        config.backgroundLegacyInterval = min(max(seconds, 15 * 60), 60 * 60)
+    }
+
     public func start() {
         guard loop == nil else { return }
         loop = Task { [weak self] in
