@@ -48,3 +48,7 @@ scripts/bundle-app.sh        # builds dist/Meter.app (METER_UNIVERSAL=1 for Appl
 ```
 
 `scripts/bundle-app.sh` signs with the self-signed identity "Mukul Chugh Local Code Signing" when it is in your keychain and falls back to ad-hoc signing otherwise. Releases are described in `docs/RELEASING.md`. Design notes are in `docs/PLAN.md` and `docs/CORE.md`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
